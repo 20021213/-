@@ -3,14 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>喵语柠檬团本分配 (腾讯云版)</title>
+    <title>喵语柠檬团本分组</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- 1. 引入 SheetJS (用于读取 Excel) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body {
             font-family: 'Inter', 'Helvetica Neue', 'Arial', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
             background-color: #f3f4f6;
+            /* 防止拖拽时选中文字 */
+            user-select: none;
+            -webkit-user-select: none;
         }
         /* 自定义表单控件样式 */
         .form-radio {
@@ -71,13 +76,46 @@
         .btn-secondary {
             @apply bg-gray-500 text-white font-semibold py-1 px-3 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all duration-200 ease-in-out;
         }
-        /* 添加刷新按钮的动画 */
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+
+        /* 拖拽样式 */
+        .member-item[draggable="true"] {
+            cursor: grab;
+            transition: background-color 0.2s, opacity 0.2s;
         }
-        .spin {
-            animation: spin 1s linear infinite;
+        .member-item[draggable="true"]:active {
+            cursor: grabbing;
+        }
+        .dragging {
+            opacity: 0.4;
+            background: #e0e7ff;
+        }
+        .drag-over-target {
+            /* 当一个元素被拖到它上面时的样式 */
+            background-color: #c7d2fe;
+            outline: 2px dashed #4f46e5;
+            outline-offset: -2px;
+        }
+
+        /* 自定义文件上传按钮 */
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+        .file-input-btn {
+            @apply w-full bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 ease-in-out;
+            cursor: pointer;
+        }
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            height: 100%;
+            width: 100%;
         }
     </style>
 </head>
@@ -112,8 +150,8 @@
                             <label class="block text-sm font-medium text-gray-700 mb-2">职业 (必选)</label>
                             <div class="flex space-x-4">
                                 <label for="role-output" class="flex items-center cursor-pointer">
-                                    <input type="radio" id="role-output" name="role" value="output" required class="form-radio">
-                                    <span class="text-gray-700">输出 (T也算输出)</span>
+                                    <input type="radio" id="role-output" name="role" value="output" required class="form-radio" checked>
+                                    <span class="text-gray-700">输出</span>
                                 </label>
                                 <label for="role-healer" class="flex items-center cursor-pointer">
                                     <input type="radio" id="role-healer" name="role" value="healer" class="form-radio">
@@ -133,25 +171,48 @@
                             </label>
                         </div>
 
+                        <!-- 新增：备注 -->
+                        <div>
+                            <label for="notes" class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                            <input type="text" id="notes" name="notes"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                   placeholder="例如: 捆绑XX, 夺舍">
+                        </div>
+
                         <button type="submit" class="w-full btn-primary mt-4 py-3 text-base">
                             <i class="ph-fill ph-plus-circle mr-1"></i>
                             添加至列表
                         </button>
                     </form>
+
+                    <!-- 新增：Excel 导入 -->
+                    <div class="mt-6 border-t pt-6">
+                        <h3 class="text-lg font-semibold text-gray-700 mb-3 flex items-center">
+                           <i class="ph-bold ph-file-xls text-xl mr-2"></i>或 批量导入
+                        </h3>
+                        <div class="file-input-wrapper">
+                            <button class="file-input-btn">
+                                <i class="ph-fill ph-upload-simple mr-1"></i>
+                                点击导入 Excel (.xlsx)
+                            </button>
+                            <input type="file" id="excel-file-input" accept=".xlsx, .xls">
+                        </div>
+                         <p class="text-xs text-gray-500 mt-2">
+                             列名需包含: `驾驶员id`, `是否是奶妈`, `是否是指挥`, `是否有本流派六重心法`, `备注`。
+                         </p>
+                    </div>
+
                 </div>
 
                 <!-- 成员列表 -->
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center justify-between">
                         <span class="flex items-center"><i class="ph-bold ph-list-numbers text-xl mr-2"></i>报名列表</span>
-                        <button id="refresh-list-btn" class="text-sm btn-secondary py-1 px-3 flex items-center">
-                            <i id="refresh-icon" class="ph-bold ph-arrows-clockwise mr-1"></i>
-                            <span id="refresh-text">刷新</span>
-                        </button>
+                        <!-- 刷新按钮已移除 -->
                         <span id="member-count" class="text-lg font-bold text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full">0 人</span>
                     </h2>
                     <div id="member-list-container" class="max-h-96 overflow-y-auto pr-2 space-y-3">
-                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">正在加载云端数据...</p>
+                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">暂无成员，请在上方添加或导入Excel。</p>
                     </div>
                 </div>
             </div>
@@ -173,7 +234,6 @@
                             清空所有数据
                         </button>
                     </div>
-                    <!-- 关键改动：添加了更详细的错误显示 -->
                     <div id="error-message" class="mt-4 text-red-600 font-medium text-center"></div>
                     <div id="debug-error-message" class="mt-2 text-xs text-gray-500 text-center"></div>
                 </div>
@@ -208,16 +268,22 @@
         </div>
     </div>
 
-    <!-- 1. 引入腾讯云 SDK -->
-    <script src="https://web.sdk.qcloud.com/latest/js/cloudbase.min.js" onload="initializeApp()"></script>
-
-    <!-- 2. 腾讯云 SDK 脚本 -->
+    <!-- 2. 本地计算器脚本 -->
     <script>
-        // 这是一个本地缓存，用于存储从云端同步过来的所有成员
+        // ===================================================
+        // === 全局变量和 DOM 引用 ===
+        // ===================================================
+
+        // 核心数据：所有成员的列表
+        // 结构: [{ uniqueId: "...", id: "GameID", role: "...", ... }]
         let localMembers = [];
-        let db; // 数据库实例
-        let membersCollection; // 集合实例
-        let auth; // 认证实例
+
+        // 核心数据：分车结果
+        let generatedTeams = [];
+        let generatedHLTargets = {};
+
+        // 拖拽数据
+        let draggedMemberUniqueId = null;
 
         // DOM 元素引用
         const addMemberForm = document.getElementById('add-member-form');
@@ -228,7 +294,6 @@
         const arrangeBtn = document.getElementById('arrange-teams-btn');
         const resetBtn = document.getElementById('reset-all-btn');
         const errorMsgEl = document.getElementById('error-message');
-        // 关键改动：添加了更详细的错误显示
         const debugErrorMsgEl = document.getElementById('debug-error-message');
 
         const teamsOutput = document.getElementById('teams-output');
@@ -238,229 +303,208 @@
         const teamCountSpan = document.getElementById('team-count');
         const subCountSpan = document.getElementById('sub-count');
 
-        const refreshBtn = document.getElementById('refresh-list-btn');
-        const refreshIcon = document.getElementById('refresh-icon');
-        const refreshText = document.getElementById('refresh-text');
+        const excelFileInput = document.getElementById('excel-file-input');
 
-        // 3. 初始化腾讯云
-        async function initializeApp() {
-            try {
-                if (typeof cloudbase === 'undefined') {
-                    throw new ReferenceError('cloudbase is not defined. SDK script might have failed to load.');
+
+        // ===================================================
+        // === 事件监听器 (程序入口) ===
+        // ===================================================
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // 1. 监听添加成员表单
+            addMemberForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const gameId = e.target.gameId.value.trim();
+                const role = e.target.role.value;
+                const isCommander = e.target.isCommander.checked;
+                const isHighLevel = e.target.isHighLevel.checked;
+                const notes = e.target.notes.value.trim();
+
+                if (!gameId || !role) {
+                    showError("游戏ID和职业不能为空！");
+                    return;
                 }
 
-                const app = cloudbase.init({
-                    env: "cloud1-0g9fc04sf3d3d747"
-                });
+                // 检查是否已存在 (移除)
+                // if (localMembers.some(m => m.id === gameId)) {
+                //     showError(`ID "${gameId}" 已存在于列表中！`);
+                //     return;
+                // }
 
-                auth = app.auth({ persistence: "local" });
-                db = app.database();
-                membersCollection = db.collection("members");
+                const newMember = {
+                    uniqueId: crypto.randomUUID(), // 关键：添加唯一ID
+                    id: gameId,
+                    role: role,
+                    isCommander: isCommander,
+                    isHighLevel: isHighLevel,
+                    notes: notes
+                };
 
-                await auth.signInAnonymously();
-                console.log("TCB: 匿名登录成功。");
-
-                await fetchMembers();
-
-                // ===================================================
-                // 绑定所有事件监听器
-                // ===================================================
-
-                refreshBtn.addEventListener('click', fetchMembers);
-
-                addMemberForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const gameId = e.target.gameId.value.trim();
-                    const role = e.target.role.value;
-                    const isCommander = e.target.isCommander.checked;
-                    const isHighLevel = e.target.isHighLevel.checked;
-
-                    if (!gameId || !role) {
-                        showError("游戏ID和职业不能为空！");
-                        return;
-                    }
-
-                    const newMember = {
-                        id: gameId,
-                        role: role,
-                        isCommander: isCommander,
-                        isHighLevel: isHighLevel
-                    };
-
-                    try {
-                        await membersCollection.add(newMember);
-                        await fetchMembers();
-                        addMemberForm.reset();
-                        e.target.gameId.focus();
-
-                    } catch (error) {
-                        console.error("TCB: 添加成员失败:", error);
-                        // 关键改动：显示详细错误
-                        showError("添加成员失败！请检查权限。", error.message);
-                    }
-                });
-
-                memberListContainer.addEventListener('click', async (e) => {
-                    const removeBtn = e.target.closest('.remove-member-btn');
-                    if (removeBtn) {
-                        const docId = removeBtn.dataset.id;
-                        if (!docId) return;
-
-                        try {
-                            await membersCollection.doc(docId).remove();
-                            await fetchMembers();
-                        } catch (error) {
-                            console.error("TCB: 删除成员失败:", error);
-                             // 关键改动：显示详细错误
-                            showError("删除失败！请检查权限。", error.message);
-                        }
-                    }
-                });
-
-                resetBtn.addEventListener('click', async () => {
-                    showError("正在清空云端数据...请稍候...");
-
-                    try {
-                        await membersCollection.where({}).remove();
-                        await fetchMembers();
-                        clearResults();
-                        showError("已清空所有云端数据。");
-
-                    } catch (error) {
-                        console.error("TCB: 清空数据失败:", error);
-                         // 关键改动：显示详细错误
-                        showError("清空失败！请检查权限。", error.message);
-                    }
-                });
-
-                arrangeBtn.addEventListener('click', () => {
-                    clearResults();
-                    if (localMembers.length === 0) {
-                         showError("报名列表为空，请先添加成员或刷新列表。");
-                         return;
-                    }
-                    // ... (排团逻辑保持不变) ...
-                    const TEAM_SIZE = 10;
-                    let remainingMembers = [...localMembers];
-                    const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
-                    if (numTeams === 0) {
-                        showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
-                        renderSubstitutes(remainingMembers);
-                        return;
-                    }
-                    let teams = Array.from({ length: numTeams }, (_, i) => ({ id: i + 1, members: [], errors: [] }));
-                    let substitutes = [];
-                    const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
-                    const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
-                    if (totalCommanders < numTeams) showError(`指挥不足！需要 ${numTeams} 名指挥，实际只有 ${totalCommanders} 名。`);
-                    if (totalHighLevelHealers < numTeams) showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
-
-                    function canAdd(member, team) {
-                        if (team.members.length >= TEAM_SIZE) return false;
-                        if (team.members.some(m => m.id === member.id)) return false;
-                        if (member.isCommander && team.members.some(m => m.isCommander)) return false;
-                        if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
-                        return true;
-                    }
-                    function addMemberToTeam(member, team) {
-                        team.members.push(member);
-                        const index = remainingMembers.findIndex(m => m._id === member._id);
-                        if (index > -1) remainingMembers.splice(index, 1);
-                    }
-
-                    let commanders = remainingMembers.filter(m => m.isCommander);
-                    teams.forEach(team => {
-                        let placed = false;
-                        for (let i = 0; i < commanders.length; i++) {
-                            let commander = commanders[i];
-                            if (canAdd(commander, team)) { addMemberToTeam(commander, team); commanders.splice(i, 1); placed = true; break; }
-                        }
-                        if (!placed) team.errors.push("缺少指挥");
-                    });
-                    let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
-                    teams.forEach(team => {
-                        if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
-                        let placed = false;
-                        for (let i = 0; i < highLevelHealers.length; i++) {
-                            let healer = highLevelHealers[i];
-                            if (canAdd(healer, team)) { addMemberToTeam(healer, team); highLevelHealers.splice(i, 1); placed = true; break; }
-                        }
-                        if (!placed) team.errors.push("缺少高战奶妈");
-                    });
-
-                    const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
-                    const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
-                    const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
-                    const highLevelTargetMax = avgHighLevel + 1;
-                    let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
-                    let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
-                    let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
-                    const placementPools = [{ pool: highLevelPool }, { pool: normalHealers }, { pool: normalOutputs }];
-
-                    placementPools.forEach(poolData => {
-                        let pool = poolData.pool;
-                        while(pool.length > 0) {
-                            let member = pool.shift();
-                            let placed = false;
-                            let sortedTeams = [...teams].sort((a, b) => {
-                                if (a.members.length !== b.members.length) return a.members.length - b.members.length;
-                                if (member.isHighLevel) return a.members.filter(m => m.isHighLevel).length - b.members.filter(m => m.isHighLevel).length;
-                                if (member.role === 'healer') return a.members.filter(m => m.role === 'healer').length - b.members.filter(m => m.role === 'healer').length;
-                                return 0;
-                            });
-                            for (let team of sortedTeams) {
-                                if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) continue;
-                                if (canAdd(member, team)) { addMemberToTeam(member, team); placed = true; break; }
-                            }
-                            if (!placed) substitutes.push(member);
-                        }
-                    });
-
-                    substitutes = [...substitutes, ...remainingMembers];
-                    renderTeams(teams, { min: highLevelTargetMin, max: highLevelTargetMax });
-                    renderSubstitutes(substitutes);
-                });
-
-
-            } catch (err) {
-                    console.error("TCB: 初始化或登录失败:", err);
-                    showError(`腾讯云初始化或登录失败！`, err.message);
-                    emptyListMsg.textContent = "连接失败，请刷新重试。";
-            }
-        }
-
-        // 6. 封装“获取数据”的函数
-        async function fetchMembers() {
-            if (!membersCollection) {
-                console.warn("TCB: fetchMembers called before DB initialization.");
-                return;
-            }
-            refreshIcon.classList.add('spin');
-            refreshText.textContent = '刷新中...';
-            emptyListMsg.textContent = "正在加载云端数据...";
-
-            try {
-                const res = await membersCollection.get();
-                localMembers = res.data;
+                localMembers.push(newMember);
                 renderMemberList(localMembers);
-                console.log("TCB: 数据获取成功。", localMembers);
-                showError(""); // 清除旧的错误
 
-            } catch (err) {
-                console.error("TCB: 获取数据失败:", err);
-                showError("获取成员列表失败！请检查权限。", err.message);
-                emptyListMsg.textContent = "加载失败，请点击刷新。";
-            } finally {
-                refreshIcon.classList.remove('spin');
-                refreshText.textContent = '刷新';
-            }
-        }
+                addMemberForm.reset();
+                // 恢复默认选中
+                document.getElementById('role-output').checked = true;
+                e.target.gameId.focus();
+                showError(""); // 清除错误
+            });
+
+            // 2. 监听成员列表的删除按钮 (事件委托)
+            memberListContainer.addEventListener('click', (e) => {
+                const removeBtn = e.target.closest('.remove-member-btn');
+                if (removeBtn) {
+                    // 关键：使用 uniqueId 删除
+                    const uniqueId = removeBtn.dataset.uniqueId;
+                    if (!uniqueId) return;
+
+                    // 从 localMembers 中移除
+                    localMembers = localMembers.filter(m => m.uniqueId !== uniqueId);
+                    renderMemberList(localMembers);
+                }
+            });
+
+            // 3. 监听清空数据按钮
+            resetBtn.addEventListener('click', () => {
+                if (confirm("确定要清空所有报名数据和分车结果吗？")) {
+                    localMembers = [];
+                    generatedTeams = [];
+                    generatedHLTargets = {};
+
+                    renderMemberList(localMembers);
+                    clearResults();
+                    showError("已清空所有本地数据。");
+                }
+            });
+
+            // 4. 监听开始排团按钮
+            arrangeBtn.addEventListener('click', () => {
+                clearResults();
+                if (localMembers.length === 0) {
+                    showError("报名列表为空，请先添加成员或导入Excel。");
+                    return;
+                }
+
+                // === 排团逻辑 (与原版一致) ===
+                const TEAM_SIZE = 10;
+                let remainingMembers = [...localMembers]; // 使用本地数据
+                const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
+
+                if (numTeams === 0) {
+                    showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
+                    renderSubstitutes(remainingMembers);
+                    return;
+                }
+
+                let teams = Array.from({ length: numTeams }, (_, i) => ({ id: i + 1, members: [], errors: [] }));
+                let substitutes = [];
+
+                const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
+                const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
+
+                if (totalCommanders < numTeams) showError(`指挥不足！需要 ${numTeams} 名指挥，实际只有 ${totalCommanders} 名。`);
+                if (totalHighLevelHealers < numTeams) showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
+
+                function canAdd(member, team) {
+                    if (team.members.length >= TEAM_SIZE) return false;
+                    if (team.members.some(m => m.id === member.id)) return false;
+                    if (member.isCommander && team.members.some(m => m.isCommander)) return false;
+                    if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
+                    return true;
+                }
+
+                function addMemberToTeam(member, team) {
+                    team.members.push(member);
+                    // 关键：这里是按 uniqueId (唯一ID) 移除
+                    const index = remainingMembers.findIndex(m => m.uniqueId === member.uniqueId);
+                    if (index > -1) remainingMembers.splice(index, 1);
+                }
+
+                // 优先放指挥
+                let commanders = remainingMembers.filter(m => m.isCommander);
+                teams.forEach(team => {
+                    let placed = false;
+                    for (let i = 0; i < commanders.length; i++) {
+                        let commander = commanders[i];
+                        if (canAdd(commander, team)) { addMemberToTeam(commander, team); commanders.splice(i, 1); placed = true; break; }
+                    }
+                    if (!placed) team.errors.push("缺少指挥");
+                });
+
+                // 其次放高战奶
+                let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
+                teams.forEach(team => {
+                    if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
+                    let placed = false;
+                    for (let i = 0; i < highLevelHealers.length; i++) {
+                        let healer = highLevelHealers[i];
+                        if (canAdd(healer, team)) { addMemberToTeam(healer, team); highLevelHealers.splice(i, 1); placed = true; break; }
+                    }
+                    if (!placed) team.errors.push("缺少高战奶妈");
+                });
+
+                // 均衡高战
+                const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
+                const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
+                const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
+                const highLevelTargetMax = avgHighLevel + 1;
+
+                // 剩余的人
+                let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
+                let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
+                let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
+
+                const placementPools = [{ pool: highLevelPool }, { pool: normalHealers }, { pool: normalOutputs }];
+
+                placementPools.forEach(poolData => {
+                    let pool = poolData.pool;
+                    while(pool.length > 0) {
+                        let member = pool.shift();
+                        let placed = false;
+                        let sortedTeams = [...teams].sort((a, b) => {
+                            if (a.members.length !== b.members.length) return a.members.length - b.members.length;
+                            if (member.isHighLevel) return a.members.filter(m => m.isHighLevel).length - b.members.filter(m => m.isHighLevel).length;
+                            if (member.role === 'healer') return a.members.filter(m => m.role === 'healer').length - b.members.filter(m => m.role === 'healer').length;
+                            return 0;
+                        });
+                        for (let team of sortedTeams) {
+                            if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) continue;
+                            if (canAdd(member, team)) { addMemberToTeam(member, team); placed = true; break; }
+                        }
+                        if (!placed) substitutes.push(member);
+                    }
+                });
+
+                substitutes = [...substitutes, ...remainingMembers];
+
+                // 存储结果到全局变量
+                generatedTeams = teams;
+                generatedHLTargets = { min: highLevelTargetMin, max: highLevelTargetMax };
+
+                renderTeams(generatedTeams, generatedHLTargets);
+                renderSubstitutes(substitutes);
+            });
+
+            // 5. 监听 Excel 文件导入
+            excelFileInput.addEventListener('change', handleExcelImport);
+
+            // 6. 监听拖拽事件 (事件委托到 teamsOutput)
+            teamsOutput.addEventListener('dragstart', handleDragStart);
+            teamsOutput.addEventListener('dragover', handleDragOver);
+            teamsOutput.addEventListener('dragleave', handleDragLeave);
+            teamsOutput.addEventListener('drop', handleDrop);
+            teamsOutput.addEventListener('dragend', handleDragEnd);
+        });
+
+        // ===================================================
+        // === 渲染与UI函数 ===
+        // ===================================================
 
         // 9. 渲染成员列表 (从 localMembers 渲染)
         function renderMemberList(members) {
             memberListContainer.innerHTML = ''; // 清空
             if (members.length === 0) {
-                emptyListMsg.textContent = "暂无成员，请在上方添加。";
+                emptyListMsg.textContent = "暂无成员，请在上方添加或导入Excel。";
                 memberListContainer.appendChild(emptyListMsg);
             } else {
                 members.forEach(member => {
@@ -481,8 +525,10 @@
                                 ${member.isHighLevel ? '<span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">高战力</span>' : ''}
                                 ${member.isCommander ? '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">指挥</span>' : ''}
                             </div>
+                            ${member.notes ? `<p class="text-xs text-gray-500 truncate mt-1" title="备注: ${member.notes}"><i class="ph-fill ph-info text-xs mr-1"></i>${member.notes}</p>` : ''}
                         </div>
-                        <button data-id="${member._id}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
+                        <!-- 注意：data-id 现在是 uniqueId -->
+                        <button data-unique-id="${member.uniqueId}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
                             <i class="ph-bold ph-x text-lg"></i>
                         </button>
                     `;
@@ -491,10 +537,6 @@
             }
             memberCountSpan.textContent = `${members.length} 人`;
         }
-
-        // ===================================
-        // === 核心排团逻辑 (START) ===
-        // ===================================
 
         function clearResults() {
             teamsOutput.innerHTML = '';
@@ -505,13 +547,12 @@
             showError("");
         }
 
-        // 关键改动：showError 现在接受第二个参数 (debugMsg)
         function showError(msg, debugMsg = "") {
             errorMsgEl.textContent = msg;
             debugErrorMsgEl.textContent = debugMsg;
         }
 
-        // 渲染团队卡片
+        // 渲染团队卡片 (核心改动：添加拖拽属性)
         function renderTeams(teams, hlTargets) {
             teamsOutput.innerHTML = '';
             teamCountSpan.textContent = teams.length;
@@ -541,12 +582,20 @@
                     else if (m.role === 'healer') idColorClass = 'text-green-700 font-semibold';
                     else if (!m.isHighLevel) idColorClass = 'text-gray-500 font-medium';
 
+                    // 检查捆绑
+                    const isBundled = m.notes && m.notes.includes('捆绑');
+
+                    // 关键：添加 draggable="true" 和 data-game-id
                     return `
-                        <li class="flex items-center p-2 bg-gray-50 rounded-md">
+                        <li class="member-item flex items-center p-2 bg-gray-50 rounded-md"
+                            draggable="true"
+                            data-unique-id="${m.uniqueId}">
+
                             <span class="w-32 truncate ${idColorClass}" title="${m.id}">${m.id}</span>
                             <span class="text-sm ${m.role === 'healer' ? 'text-green-700' : 'text-red-700'} w-12">${m.role === 'healer' ? '奶妈' : '输出'}</span>
                             ${m.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-sm" title="高战力"></i>' : '<i class="ph ph-star text-gray-300 text-sm" title="普通战力"></i>'}
                             ${m.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-sm ml-2" title="指挥"></i>' : ''}
+                            ${isBundled ? '<i class="ph-fill ph-link text-red-500 text-sm ml-2" title="捆绑: ${m.notes}"></i>' : ''}
                         </li>
                     `;
                 }).join('');
@@ -565,7 +614,8 @@
                         <span class="font-semibold ${hlStatusColor}">高战力: ${highLevels.length} 人</span>
                     </div>
                     <div class="mb-3">${errorHtml}</div>
-                    <ul class="space-y-1 max-h-60 overflow-y-auto pr-2">
+                    <!-- 注意：ul 列表需要一个 data-team-id 来辅助 drop 事件 -->
+                    <ul class="space-y-1 max-h-60 overflow-y-auto pr-2" data-team-id="${team.id}">
                         ${memberListHtml}
                     </ul>
                 `;
@@ -593,20 +643,193 @@
                 else if (member.role === 'healer') idColorClass = 'text-green-700 font-semibold';
                 else if (!member.isHighLevel) idColorClass = 'text-gray-500';
 
+                const isBundled = member.notes && member.notes.includes('捆绑');
+
                 subEl.innerHTML = `
                     <span class="${idColorClass}" title="${member.id}">${member.id}</span>
                     ${member.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-xs" title="高战力"></i>' : ''}
                     ${member.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-xs" title="指挥"></i>' : ''}
+                    ${isBundled ? '<i class="ph-fill ph-link text-red-500 text-xs ml-1" title="捆绑: ${member.notes}"></i>' : ''}
                     <span class="text-xs ${member.role === 'healer' ? 'text-green-700' : 'text-red-700'}">(${member.role === 'healer' ? '奶' : '输出'})</span>
                 `;
                 subsOutput.appendChild(subEl);
             });
         }
 
-        // ===================================
-        // === 核心排团逻辑 (END) ===
-        // ===================================
+        // ===================================================
+        // === Excel 导入逻辑 ===
+        // ===================================================
+        function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet);
+
+                    parseAndAddMembers(json);
+
+                } catch (err) {
+                    showError("Excel 文件读取失败！", err.message);
+                } finally {
+                    // 清空 input 以便下次能触发 change
+                    event.target.value = null;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseAndAddMembers(data) {
+            let addedCount = 0;
+            let skippedCount = 0;
+            // 移除 existingIds Set，因为我们现在允许重复
+            // const existingIds = new Set(localMembers.map(m => m.id));
+
+            data.forEach(row => {
+                // 寻找匹配的列名 (兼容大小写和空格)
+                // 修复：从 === 精确匹配改为 startsWith 模糊匹配，以兼容 '...(不是就不填)' 这样的列名
+                const normalize = (s) => s.trim().toLowerCase();
+
+                const idKey = Object.keys(row).find(k => normalize(k).startsWith('驾驶员id'));
+                const healerKey = Object.keys(row).find(k => normalize(k).startsWith('是否是奶妈'));
+                const commanderKey = Object.keys(row).find(k => normalize(k).startsWith('是否是指挥'));
+                const highLevelKey = Object.keys(row).find(k => normalize(k).startsWith('是否有本流派六重心法'));
+                const notesKey = Object.keys(row).find(k => normalize(k).startsWith('备注'));
+
+                const gameId = row[idKey] ? String(row[idKey]).trim() : null;
+
+                if (!gameId) {
+                    skippedCount++;
+                    return; // 跳过没有ID的行
+                }
+
+                // 移除：不再检查ID是否重复
+                // if (existingIds.has(gameId)) {
+                //     skippedCount++;
+                //     return; // 跳过已存在的ID
+                // }
+
+                // 辅助函数：检查是否为 "是"
+                const isTrue = (val) => val && !['否', '0', 'no', 'false', ''].includes(String(val).trim().toLowerCase());
+
+                const newMember = {
+                    uniqueId: crypto.randomUUID(), // 关键：添加唯一ID
+                    id: gameId,
+                    role: isTrue(row[healerKey]) ? 'healer' : 'output',
+                    isCommander: isTrue(row[commanderKey]),
+                    isHighLevel: isTrue(row[highLevelKey]),
+                    notes: row[notesKey] ? String(row[notesKey]).trim() : ''
+                };
+
+                localMembers.push(newMember);
+                // existingIds.add(gameId); // 移除
+                addedCount++;
+            });
+
+            renderMemberList(localMembers);
+            showError(`导入完成：成功添加 ${addedCount} 人，跳过 ${skippedCount} 人 (ID为空)。`);
+        }
+
+        // ===================================================
+        // === 拖拽交换逻辑 ===
+        // ===================================================
+
+        function handleDragStart(e) {
+            const target = e.target.closest('.member-item');
+            if (target) {
+                // 关键：使用 data-unique-id
+                draggedMemberUniqueId = target.dataset.uniqueId;
+                e.dataTransfer.setData('text/plain', draggedMemberUniqueId);
+                e.dataTransfer.effectAllowed = 'move';
+                target.classList.add('dragging');
+            }
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            const target = e.target.closest('.member-item');
+            // 关键：使用 data-unique-id 比较
+            if (target && target.dataset.uniqueId !== draggedMemberUniqueId) {
+                target.classList.add('drag-over-target');
+                e.dataTransfer.dropEffect = 'move';
+            }
+        }
+
+        function handleDragLeave(e) {
+             const target = e.target.closest('.member-item');
+             if (target) {
+                target.classList.remove('drag-over-target');
+             }
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetMemberEl = e.target.closest('.member-item');
+
+            // 清理视觉效果
+            document.querySelectorAll('.drag-over-target').forEach(el => el.classList.remove('drag-over-target'));
+
+            if (!targetMemberEl || !draggedMemberUniqueId) return;
+
+            // 关键：使用 data-unique-id
+            const targetMemberUniqueId = targetMemberEl.dataset.uniqueId;
+
+            // 不允许拖到自己身上
+            if (draggedMemberUniqueId === targetMemberUniqueId) return;
+
+            // 找到拖拽者和目标在 generatedTeams 数据中的位置
+            let draggedInfo = findMemberLocation(draggedMemberUniqueId);
+            let targetInfo = findMemberLocation(targetMemberUniqueId);
+
+            if (draggedInfo && targetInfo) {
+                // 执行数据交换
+                const { team: draggedTeam, index: draggedIndex, member: draggedMember } = draggedInfo;
+                const { team: targetTeam, index: targetIndex, member: targetMember } = targetInfo;
+
+                draggedTeam.members[draggedIndex] = targetMember;
+                targetTeam.members[targetIndex] = draggedMember;
+
+                // 交换完成，重新渲染所有团队
+                renderTeams(generatedTeams, generatedHLTargets);
+                showError(`交换成功：${draggedMember.id} <-> ${targetMember.id}`);
+            } else {
+                showError("交换失败：未能在数据中找到成员。");
+            }
+        }
+
+        function handleDragEnd(e) {
+            // 清理
+            document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
+            draggedMemberUniqueId = null;
+        }
+
+        /**
+         * 辅助函数：在 generatedTeams 中查找成员
+         * @param {string} uniqueId
+         * @returns {object|null} { member, team, index }
+         */
+        function findMemberLocation(uniqueId) {
+            for (const team of generatedTeams) {
+                // 关键：使用 uniqueId 查找
+                const memberIndex = team.members.findIndex(m => m.uniqueId === uniqueId);
+                if (memberIndex !== -1) {
+                    return {
+                        member: team.members[memberIndex],
+                        team: team,
+                        index: memberIndex
+                    };
+                }
+            }
+            return null; // 未找到
+        }
+
     </script>
 </body>
 </html>
+
 
