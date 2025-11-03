@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- 标题已更新 -->
-    <title>喵语柠檬团本分配 (云同步版)</title>
+    <title>喵语柠檬团本分配 (腾讯云版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- 1. 引入腾讯云 SDK -->
+    <script src="https://web.sdk.qcloud.com/latest/js/cloudbase.min.js"></script>
     <style>
         body {
             font-family: 'Inter', 'Helvetica Neue', 'Arial', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -141,7 +143,7 @@
                     </h2>
                     <div id="member-list-container" class="max-h-96 overflow-y-auto pr-2 space-y-3">
                         <!-- 成员条目将在这里动态插入 -->
-                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">正在连接到云端数据库...</p>
+                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">正在连接到腾讯云数据库...</p>
                     </div>
                 </div>
             </div>
@@ -196,41 +198,13 @@
         </div>
     </div>
 
-    <!-- Firebase 脚本 -->
-    <script type="module">
-        // 导入 Firebase 服务
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-        // 导入 Firestore 数据库服务
-        import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, doc, query, getDocs, setLogLevel } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
-
-        // ===================================================
-        // === 粘贴您自己的 FIREBASE CONFIG ===
-        // ===================================================
-        // 这就是您刚才从 Firebase 网站复制的代码
-        const firebaseConfig = {
-            apiKey: "AIzaSyB_fpCP8yI3VHLPOAQ1N3vBkc-QNd5cB_s",
-            authDomain: "miaoyu-a094f.firebaseapp.com",
-            projectId: "miaoyu-a094f",
-            storageBucket: "miaoyu-a094f.firebasestorage.app",
-            messagingSenderId: "432307394533",
-            appId: "1:432307394533:web:f4e8f01814aed0210c010c",
-            measurementId: "G-6DFK9JM4DF"
-        };
-        // ===================================================
-
-        // 初始化 Firebase
-        const app = initializeApp(firebaseConfig);
-        // 初始化 Firestore 数据库
-        const db = getFirestore(app);
-
-        // 开启调试日志，方便在F12控制台查看连接状态
-        setLogLevel('debug');
-
-        // 定义我们要操作的数据库 "集合"（类似一个数据表）
-        const membersCollection = collection(db, "members");
-
+    <!-- 2. 腾讯云 SDK 脚本 -->
+    <script>
         // 这是一个本地缓存，用于存储从云端同步过来的所有成员
         let localMembers = [];
+        let db; // 数据库实例
+        let membersCollection; // 集合实例
+        let watcher; // 监听器
 
         document.addEventListener('DOMContentLoaded', () => {
             const addMemberForm = document.getElementById('add-member-form');
@@ -249,32 +223,45 @@
             const teamCountSpan = document.getElementById('team-count');
             const subCountSpan = document.getElementById('sub-count');
 
-            // === 核心：实时同步 ===
-            // 监听云端数据库的 "members" 集合
-            const q = query(membersCollection);
-            const unsubscribe = onSnapshot(q, (querySnapshot) => {
-                localMembers = []; // 清空本地缓存
-                querySnapshot.forEach((doc) => {
-                    // 将云端数据和它的唯一ID存入本地缓存
-                    localMembers.push({
-                        ...doc.data(),
-                        fbId: doc.id // fbId 是 Firestore 的文档 ID
-                    });
+            // 3. 初始化腾讯云
+            try {
+                const app = cloudbase.init({
+                    // ===================================================
+                    // === 您的腾讯云环境 ID ===
+                    // ===================================================
+                    env: "cloud1-0g9fc04sf3d3d747"
+                    // ===================================================
                 });
 
-                // 用最新的云端数据重新渲染列表
-                renderMemberList(localMembers);
+                // 4. 获取数据库引用
+                db = app.database();
+                membersCollection = db.collection("members"); // 必须和您在后台创建的集合同名
 
-                // 顺便清空一下排团结果，因为名单变化了
-                clearResults();
+                // 5. 核心：实时同步 (使用 .watch)
+                watcher = membersCollection.watch({
+                    onChange: (snapshot) => {
+                        console.log("TCB: 数据已更新", snapshot.docs);
+                        // 腾讯云的 .watch 返回的是完整的数据列表
+                        localMembers = snapshot.docs;
 
-            }, (error) => {
-                console.error("Firebase 监听失败:", error);
-                showError("连接云端数据库失败！请检查F12控制台。");
-            });
+                        // 用最新的云端数据重新渲染列表
+                        renderMemberList(localMembers);
 
+                        // 顺便清空一下排团结果，因为名单变化了
+                        clearResults();
+                    },
+                    onError: (err) => {
+                        console.error("TCB: 监听失败:", err);
+                        showError("连接云端数据库失败！请检查F12控制台或腾讯云权限。");
+                    }
+                });
 
-            // 提交表单添加成员 (现在是添加到云端)
+            } catch (err) {
+                 console.error("TCB: 初始化失败:", err);
+                 showError("腾讯云SDK初始化失败！请检查环境ID是否正确。");
+            }
+
+            // 提交表单添加成员 (现在是添加到腾讯云)
             addMemberForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const gameId = e.target.gameId.value.trim();
@@ -293,19 +280,18 @@
                     role: role,
                     isCommander: isCommander,
                     isHighLevel: isHighLevel
-                    // 注意：不再需要本地的 'key'
                 };
 
                 try {
-                    // 将新成员添加到云端数据库
-                    await addDoc(membersCollection, newMember);
-                    // 添加成功后，onSnapshot 会自动触发并更新列表
+                    // 6. 将新成员添加到云端数据库
+                    await membersCollection.add(newMember);
+                    // 添加成功后，watch 会自动触发并更新列表
 
                     addMemberForm.reset();
                     e.target.gameId.focus();
 
                 } catch (error) {
-                    console.error("添加成员失败:", error);
+                    console.error("TCB: 添加成员失败:", error);
                     showError("添加失败，请检查网络或F12控制台。");
                 }
             });
@@ -341,8 +327,8 @@
                                     ${member.isCommander ? '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">指挥</span>' : ''}
                                 </div>
                             </div>
-                            <!-- 关键改动：使用 fbId 作为 data-id -->
-                            <button data-id="${member.fbId}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
+                            <!-- 7. 关键改动：使用 tcb 的 _id 作为 data-id -->
+                            <button data-id="${member._id}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
                                 <i class="ph-bold ph-x text-lg"></i>
                             </button>
                         `;
@@ -352,8 +338,7 @@
                 memberCountSpan.textContent = `${members.length} 人`;
             }
 
-            // === 关键改动：使用事件委托处理删除 ===
-            // 因为列表是动态生成的，我们把点击事件绑在父容器上
+            // 8. 使用事件委托处理删除
             memberListContainer.addEventListener('click', async (e) => {
                 const removeBtn = e.target.closest('.remove-member-btn');
                 if (removeBtn) {
@@ -362,42 +347,33 @@
 
                     try {
                         // 从云端数据库删除
-                        await deleteDoc(doc(db, "members", docId));
-                        // onSnapshot 会自动触发并更新列表
+                        await membersCollection.doc(docId).remove();
+                        // watch 会自动触发并更新列表
                     } catch (error) {
-                        console.error("删除成员失败:", error);
+                        console.error("TCB: 删除成员失败:", error);
                         showError("删除失败，请检查网络。");
                     }
                 }
             });
 
 
-            // 清空所有数据 (现在是清空云端)
+            // 9. 清空所有数据 (现在是清空腾讯云)
             resetBtn.addEventListener('click', async () => {
-                // 自定义一个确认框，因为 window.confirm 在 iframe 中可能被阻止
                 showError("正在清空云端数据...请稍候...");
 
                 try {
-                    // 1. 查询所有文档
-                    const q = query(membersCollection);
-                    const querySnapshot = await getDocs(q);
+                    // 腾讯云的批量删除
+                    // .remove() 不传参数会删除所有
+                    // 我们需要确保权限是开启的
+                    await membersCollection.where({}).remove();
 
-                    // 2. 创建一个删除承诺数组
-                    const deletePromises = [];
-                    querySnapshot.forEach((doc) => {
-                        deletePromises.push(deleteDoc(doc.ref));
-                    });
-
-                    // 3. 一次性执行所有删除
-                    await Promise.all(deletePromises);
-
-                    // onSnapshot 会自动触发，将列表清空
+                    // watch 会自动触发，将列表清空
                     clearResults();
                     showError("已清空所有云端数据。");
 
                 } catch (error) {
-                    console.error("清空数据失败:", error);
-                    showError("清空失败，请检查网络或数据库规则。");
+                    console.error("TCB: 清空数据失败:", error);
+                    showError("清空失败，请检查网络或数据库权限。");
                 }
             });
 
@@ -418,31 +394,29 @@
 
             // ===================================
             // === 核心排团逻辑 (START) ===
+            // (这部分逻辑与数据库无关，保持不变)
             // ===================================
             arrangeBtn.addEventListener('click', () => {
                 clearResults();
 
                 const TEAM_SIZE = 10;
-                // 关键改动：使用从云端同步的 localMembers
                 let remainingMembers = [...localMembers];
 
-                // 0. 计算车数
                 const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
                 if (numTeams === 0) {
                     showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
-                    renderSubstitutes(remainingMembers); // 全部丢到替补
+                    renderSubstitutes(remainingMembers);
                     return;
                 }
 
                 let teams = Array.from({ length: numTeams }, (_, i) => ({
                     id: i + 1,
                     members: [],
-                    errors: [], // 存储此车遇到的硬性问题
+                    errors: [],
                 }));
 
                 let substitutes = [];
 
-                // 1. 检查硬性资源是否足够
                 const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
                 const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
 
@@ -453,7 +427,6 @@
                     showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
                 }
 
-                // 2. 定义辅助函数
                 function canAdd(member, team) {
                     if (team.members.length >= TEAM_SIZE) return false;
                     if (team.members.some(m => m.id === member.id)) return false;
@@ -464,8 +437,8 @@
 
                 function addMemberToTeam(member, team) {
                     team.members.push(member);
-                    // 关键改动：使用 fbId 查找
-                    const index = remainingMembers.findIndex(m => m.fbId === member.fbId);
+                    // 10. 关键改动：使用 tcb 的 _id 查找
+                    const index = remainingMembers.findIndex(m => m._id === member._id);
                     if (index > -1) {
                         remainingMembers.splice(index, 1);
                     }
@@ -504,7 +477,7 @@
                 });
 
                 // 4. 分配剩余成员
-                const totalHighLevel = localMembers.filter(m => m.isHighLevel).length; // 使用 localMembers 计算总数
+                const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
 
                 const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
                 const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
@@ -676,4 +649,5 @@
     </script>
 </body>
 </html>
+
 
