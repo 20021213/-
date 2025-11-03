@@ -3,12 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 标题已更新 -->
     <title>喵语柠檬团本分配 (腾讯云版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <!-- 1. 腾讯云 SDK 已从 <head> 移除 -->
     <style>
         body {
             font-family: 'Inter', 'Helvetica Neue', 'Arial', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
@@ -72,6 +70,14 @@
         }
         .btn-secondary {
             @apply bg-gray-500 text-white font-semibold py-1 px-3 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all duration-200 ease-in-out;
+        }
+        /* 添加刷新按钮的动画 */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin {
+            animation: spin 1s linear infinite;
         }
     </style>
 </head>
@@ -138,11 +144,14 @@
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center justify-between">
                         <span class="flex items-center"><i class="ph-bold ph-list-numbers text-xl mr-2"></i>报名列表</span>
+                        <button id="refresh-list-btn" class="text-sm btn-secondary py-1 px-3 flex items-center">
+                            <i id="refresh-icon" class="ph-bold ph-arrows-clockwise mr-1"></i>
+                            <span id="refresh-text">刷新</span>
+                        </button>
                         <span id="member-count" class="text-lg font-bold text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full">0 人</span>
                     </h2>
                     <div id="member-list-container" class="max-h-96 overflow-y-auto pr-2 space-y-3">
-                        <!-- 成员条目将在这里动态插入 -->
-                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">正在连接到腾讯云数据库...</p>
+                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">正在加载云端数据...</p>
                     </div>
                 </div>
             </div>
@@ -164,7 +173,9 @@
                             清空所有数据
                         </button>
                     </div>
+                    <!-- 关键改动：添加了更详细的错误显示 -->
                     <div id="error-message" class="mt-4 text-red-600 font-medium text-center"></div>
+                    <div id="debug-error-message" class="mt-2 text-xs text-gray-500 text-center"></div>
                 </div>
 
                 <!-- 结果区域 -->
@@ -197,468 +208,404 @@
         </div>
     </div>
 
-    <!-- 1. 引入腾讯云 SDK (移到此处) -->
-    <!-- 关键修复：添加了 onload="initializeApp()" -->
+    <!-- 1. 引入腾讯云 SDK -->
     <script src="https://web.sdk.qcloud.com/latest/js/cloudbase.min.js" onload="initializeApp()"></script>
 
     <!-- 2. 腾讯云 SDK 脚本 -->
-    <!-- 关键修复：将所有代码包装在 initializeApp() 函数中 -->
     <script>
-        function initializeApp() {
-            // 这是一个本地缓存，用于存储从云端同步过来的所有成员
-            let localMembers = [];
-            let db; // 数据库实例
-            let membersCollection; // 集合实例
-            let watcher; // 监听器
+        // 这是一个本地缓存，用于存储从云端同步过来的所有成员
+        let localMembers = [];
+        let db; // 数据库实例
+        let membersCollection; // 集合实例
+        let auth; // 认证实例
 
-            const addMemberForm = document.getElementById('add-member-form');
-            const memberListContainer = document.getElementById('member-list-container');
-            const emptyListMsg = document.getElementById('empty-list-msg');
-            const memberCountSpan = document.getElementById('member-count');
+        // DOM 元素引用
+        const addMemberForm = document.getElementById('add-member-form');
+        const memberListContainer = document.getElementById('member-list-container');
+        const emptyListMsg = document.getElementById('empty-list-msg');
+        const memberCountSpan = document.getElementById('member-count');
 
-            const arrangeBtn = document.getElementById('arrange-teams-btn');
-            const resetBtn = document.getElementById('reset-all-btn');
-            const errorMsgEl = document.getElementById('error-message');
+        const arrangeBtn = document.getElementById('arrange-teams-btn');
+        const resetBtn = document.getElementById('reset-all-btn');
+        const errorMsgEl = document.getElementById('error-message');
+        // 关键改动：添加了更详细的错误显示
+        const debugErrorMsgEl = document.getElementById('debug-error-message');
 
-            const teamsOutput = document.getElementById('teams-output');
-            const subsOutput = document.getElementById('subs-list');
-            const emptySubsMsg = document.getElementById('empty-subs-msg');
+        const teamsOutput = document.getElementById('teams-output');
+        const subsOutput = document.getElementById('subs-list');
+        const emptySubsMsg = document.getElementById('empty-subs-msg');
 
-            const teamCountSpan = document.getElementById('team-count');
-            const subCountSpan = document.getElementById('sub-count');
+        const teamCountSpan = document.getElementById('team-count');
+        const subCountSpan = document.getElementById('sub-count');
 
-            // 3. 初始化腾讯云
+        const refreshBtn = document.getElementById('refresh-list-btn');
+        const refreshIcon = document.getElementById('refresh-icon');
+        const refreshText = document.getElementById('refresh-text');
+
+        // 3. 初始化腾讯云
+        async function initializeApp() {
             try {
-                // 确保 cloudbase 已经加载
-                // 此时 cloudbase 必定已定义，因为这是 onload 调用的
                 if (typeof cloudbase === 'undefined') {
                     throw new ReferenceError('cloudbase is not defined. SDK script might have failed to load.');
                 }
 
                 const app = cloudbase.init({
-                    // ===================================================
-                    // === 您的腾讯云环境 ID ===
-                    // ===================================================
                     env: "cloud1-0g9fc04sf3d3d747"
-                    // ===================================================
                 });
 
-                // 4. 获取数据库引用
+                auth = app.auth({ persistence: "local" });
                 db = app.database();
-                membersCollection = db.collection("members"); // 必须和您在后台创建的集合同名
+                membersCollection = db.collection("members");
 
-                // 5. 核心：实时同步 (使用 .watch)
-                watcher = membersCollection.watch({
-                    onChange: (snapshot) => {
-                        console.log("TCB: 数据已更新", snapshot.docs);
-                        // 腾讯云的 .watch 返回的是完整的数据列表
-                        localMembers = snapshot.docs;
+                await auth.signInAnonymously();
+                console.log("TCB: 匿名登录成功。");
 
-                        // 用最新的云端数据重新渲染列表
-                        renderMemberList(localMembers);
+                await fetchMembers();
 
-                        // 顺便清空一下排团结果，因为名单变化了
-                        clearResults();
-                    },
-                    onError: (err) => {
-                        console.error("TCB: 监听失败:", err);
-                        showError("连接云端数据库失败！请检查F12控制台或腾讯云权限。");
+                // ===================================================
+                // 绑定所有事件监听器
+                // ===================================================
+
+                refreshBtn.addEventListener('click', fetchMembers);
+
+                addMemberForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const gameId = e.target.gameId.value.trim();
+                    const role = e.target.role.value;
+                    const isCommander = e.target.isCommander.checked;
+                    const isHighLevel = e.target.isHighLevel.checked;
+
+                    if (!gameId || !role) {
+                        showError("游戏ID和职业不能为空！");
+                        return;
                     }
-                });
 
-            } catch (err) {
-                    console.error("TCB: 初始化失败:", err);
-                    // 把更详细的错误信息显示出来
-                    showError(`腾讯云SDK初始化失败！${err.message}。请检查环境ID和网络。`);
-            }
-
-            // 提交表单添加成员 (现在是添加到腾讯云)
-            addMemberForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const gameId = e.target.gameId.value.trim();
-                const role = e.target.role.value;
-                const isCommander = e.target.isCommander.checked;
-                const isHighLevel = e.target.isHighLevel.checked;
-
-                if (!gameId || !role) {
-                    showError("游戏ID和职业不能为空！");
-                    return;
-                }
-
-                // 创建新成员对象
-                const newMember = {
-                    id: gameId,
-                    role: role,
-                    isCommander: isCommander,
-                    isHighLevel: isHighLevel
-                };
-
-                try {
-                    // 6. 将新成员添加到云端数据库
-                    await membersCollection.add(newMember);
-                    // 添加成功后，watch 会自动触发并更新列表
-
-                    addMemberForm.reset();
-                    e.target.gameId.focus();
-
-                } catch (error) {
-                    console.error("TCB: 添加成员失败:", error);
-                    showError("添加失败，请检查网络或F12控制台。");
-                }
-            });
-
-            // 渲染成员列表 (现在从 localMembers 渲染)
-            function renderMemberList(members) {
-                memberListContainer.innerHTML = ''; // 清空
-                if (members.length === 0) {
-                    emptyListMsg.textContent = "暂无成员，请在上方添加。";
-                    memberListContainer.appendChild(emptyListMsg);
-                } else {
-                    members.forEach(member => {
-                        const memberEl = document.createElement('div');
-                        memberEl.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200';
-
-                        let idColorClass = 'text-gray-800 font-semibold'; // 默认高战输出
-                        if (member.isCommander) {
-                            idColorClass = 'text-blue-600 font-bold'; // 指挥
-                        } else if (member.role === 'healer') {
-                            idColorClass = 'text-green-700 font-semibold'; // 奶妈
-                        } else if (!member.isHighLevel) {
-                            idColorClass = 'text-gray-500'; // 低战力输出
-                        }
-
-                        memberEl.innerHTML = `
-                            <div class="flex-1 overflow-hidden">
-                                <p class="truncate ${idColorClass}" title="${member.id}">${member.id}</p>
-                                <div class="flex items-center space-x-2 text-sm mt-1">
-                                    <span class="px-2 py-0.5 rounded-full ${member.role === 'healer' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                                        ${member.role === 'healer' ? '奶妈' : '输出'}
-                                    </span>
-                                    ${member.isHighLevel ? '<span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">高战力</span>' : ''}
-                                    ${member.isCommander ? '<span class="px-2 py-0.sale rounded-full bg-blue-100 text-blue-800 font-medium">指挥</span>' : ''}
-                                </div>
-                            </div>
-                            <!-- 7. 关键改动：使用 tcb 的 _id 作为 data-id -->
-                            <button data-id="${member._id}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
-                                <i class="ph-bold ph-x text-lg"></i>
-                            </button>
-                        `;
-                        memberListContainer.appendChild(memberEl);
-                    });
-                }
-                memberCountSpan.textContent = `${members.length} 人`;
-            }
-
-            // 8. 使用事件委托处理删除
-            memberListContainer.addEventListener('click', async (e) => {
-                const removeBtn = e.target.closest('.remove-member-btn');
-                if (removeBtn) {
-                    const docId = removeBtn.dataset.id;
-                    if (!docId) return;
+                    const newMember = {
+                        id: gameId,
+                        role: role,
+                        isCommander: isCommander,
+                        isHighLevel: isHighLevel
+                    };
 
                     try {
-                        // 从云端数据库删除
-                        await membersCollection.doc(docId).remove();
-                        // watch 会自动触发并更新列表
+                        await membersCollection.add(newMember);
+                        await fetchMembers();
+                        addMemberForm.reset();
+                        e.target.gameId.focus();
+
                     } catch (error) {
-                        console.error("TCB: 删除成员失败:", error);
-                        showError("删除失败，请检查网络。");
+                        console.error("TCB: 添加成员失败:", error);
+                        // 关键改动：显示详细错误
+                        showError("添加成员失败！请检查权限。", error.message);
                     }
-                }
-            });
+                });
 
+                memberListContainer.addEventListener('click', async (e) => {
+                    const removeBtn = e.target.closest('.remove-member-btn');
+                    if (removeBtn) {
+                        const docId = removeBtn.dataset.id;
+                        if (!docId) return;
 
-            // 9. 清空所有数据 (现在是清空腾讯云)
-            resetBtn.addEventListener('click', async () => {
-                showError("正在清空云端数据...请稍候...");
+                        try {
+                            await membersCollection.doc(docId).remove();
+                            await fetchMembers();
+                        } catch (error) {
+                            console.error("TCB: 删除成员失败:", error);
+                             // 关键改动：显示详细错误
+                            showError("删除失败！请检查权限。", error.message);
+                        }
+                    }
+                });
 
-                try {
-                    // 腾讯云的批量删除
-                    // .remove() 不传参数会删除所有
-                    // 我们需要确保权限是开启的
-                    await membersCollection.where({}).remove();
+                resetBtn.addEventListener('click', async () => {
+                    showError("正在清空云端数据...请稍候...");
 
-                    // watch 会自动触发，将列表清空
+                    try {
+                        await membersCollection.where({}).remove();
+                        await fetchMembers();
+                        clearResults();
+                        showError("已清空所有云端数据。");
+
+                    } catch (error) {
+                        console.error("TCB: 清空数据失败:", error);
+                         // 关键改动：显示详细错误
+                        showError("清空失败！请检查权限。", error.message);
+                    }
+                });
+
+                arrangeBtn.addEventListener('click', () => {
                     clearResults();
-                    showError("已清空所有云端数据。");
-
-                } catch (error) {
-                    console.error("TCB: 清空数据失败:", error);
-                    showError("清空失败，请检查网络或数据库权限。");
-                }
-            });
-
-            // 清空结果区域 (本地操作)
-            function clearResults() {
-                teamsOutput.innerHTML = '';
-                subsOutput.innerHTML = '';
-                subsOutput.appendChild(emptySubsMsg);
-                teamCountSpan.textContent = '0';
-                subCountSpan.textContent = '0';
-                showError("");
-            }
-
-            // 显示错误信息 (本地操作)
-            function showError(msg) {
-                errorMsgEl.textContent = msg;
-            }
-
-            // ===================================
-            // === 核心排团逻辑 (START) ===
-            // (这部分逻辑与数据库无关，保持不变)
-            // ===================================
-            arrangeBtn.addEventListener('click', () => {
-                clearResults();
-
-                const TEAM_SIZE = 10;
-                let remainingMembers = [...localMembers];
-
-                const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
-                if (numTeams === 0) {
-                    showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
-                    renderSubstitutes(remainingMembers);
-                    return;
-                }
-
-                let teams = Array.from({ length: numTeams }, (_, i) => ({
-                    id: i + 1,
-                    members: [],
-                    errors: [],
-                }));
-
-                let substitutes = [];
-
-                const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
-                const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
-
-                if (totalCommanders < numTeams) {
-                    showError(`指挥不足！需要 ${numTeams} 名指挥，实际只有 ${totalCommanders} 名。`);
-                }
-                if (totalHighLevelHealers < numTeams) {
-                    showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
-                }
-
-                function canAdd(member, team) {
-                    if (team.members.length >= TEAM_SIZE) return false;
-                    if (team.members.some(m => m.id === member.id)) return false;
-                    if (member.isCommander && team.members.some(m => m.isCommander)) return false;
-                    if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
-                    return true;
-                }
-
-                function addMemberToTeam(member, team) {
-                    team.members.push(member);
-                    // 10. 关键改动：使用 tcb 的 _id 查找
-                    const index = remainingMembers.findIndex(m => m._id === member._id);
-                    if (index > -1) {
-                        remainingMembers.splice(index, 1);
+                    if (localMembers.length === 0) {
+                         showError("报名列表为空，请先添加成员或刷新列表。");
+                         return;
                     }
-                }
-
-                // 3. 分配核心成员 (指挥 & 高战奶)
-                let commanders = remainingMembers.filter(m => m.isCommander);
-                teams.forEach(team => {
-                    let placed = false;
-                    for (let i = 0; i < commanders.length; i++) {
-                        let commander = commanders[i];
-                        if (canAdd(commander, team)) {
-                            addMemberToTeam(commander, team);
-                            commanders.splice(i, 1);
-                            placed = true;
-                            break;
-                        }
+                    // ... (排团逻辑保持不变) ...
+                    const TEAM_SIZE = 10;
+                    let remainingMembers = [...localMembers];
+                    const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
+                    if (numTeams === 0) {
+                        showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
+                        renderSubstitutes(remainingMembers);
+                        return;
                     }
-                    if (!placed) team.errors.push("缺少指挥");
-                });
+                    let teams = Array.from({ length: numTeams }, (_, i) => ({ id: i + 1, members: [], errors: [] }));
+                    let substitutes = [];
+                    const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
+                    const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
+                    if (totalCommanders < numTeams) showError(`指挥不足！需要 ${numTeams} 名指挥，实际只有 ${totalCommanders} 名。`);
+                    if (totalHighLevelHealers < numTeams) showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
 
-                let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
-                teams.forEach(team => {
-                    if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
-                    let placed = false;
-                    for (let i = 0; i < highLevelHealers.length; i++) {
-                        let healer = highLevelHealers[i];
-                        if (canAdd(healer, team)) {
-                            addMemberToTeam(healer, team);
-                            highLevelHealers.splice(i, 1);
-                            placed = true;
-                            break;
-                        }
+                    function canAdd(member, team) {
+                        if (team.members.length >= TEAM_SIZE) return false;
+                        if (team.members.some(m => m.id === member.id)) return false;
+                        if (member.isCommander && team.members.some(m => m.isCommander)) return false;
+                        if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
+                        return true;
                     }
-                    if (!placed) team.errors.push("缺少高战奶妈");
-                });
+                    function addMemberToTeam(member, team) {
+                        team.members.push(member);
+                        const index = remainingMembers.findIndex(m => m._id === member._id);
+                        if (index > -1) remainingMembers.splice(index, 1);
+                    }
 
-                // 4. 分配剩余成员
-                const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
-
-                const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
-                const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
-                const highLevelTargetMax = avgHighLevel + 1;
-
-                let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
-                let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
-                let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
-
-                const placementPools = [
-                    { name: "高战力池", pool: highLevelPool },
-                    { name: "普通奶妈池", pool: normalHealers },
-                    { name: "普通输出池", pool: normalOutputs }
-                ];
-
-                placementPools.forEach(poolData => {
-                    let pool = poolData.pool;
-                    while(pool.length > 0) {
-                        let member = pool.shift();
+                    let commanders = remainingMembers.filter(m => m.isCommander);
+                    teams.forEach(team => {
                         let placed = false;
-
-                        let sortedTeams = [...teams].sort((a, b) => {
-                            if (a.members.length !== b.members.length) {
-                                return a.members.length - b.members.length;
-                            }
-                            if (member.isHighLevel) {
-                                let aHL = a.members.filter(m => m.isHighLevel).length;
-                                let bHL = b.members.filter(m => m.isHighLevel).length;
-                                return aHL - bHL;
-                            }
-                            if (member.role === 'healer') {
-                                let aH = a.members.filter(m => m.role === 'healer').length;
-                                let bH = b.members.filter(m => m.role === 'healer').length;
-                                return aH - bH;
-                            }
-                            return 0;
-                        });
-
-                        for (let team of sortedTeams) {
-                            if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) {
-                                continue;
-                            }
-                            if (canAdd(member, team)) {
-                                addMemberToTeam(member, team);
-                                placed = true;
-                                break;
-                            }
+                        for (let i = 0; i < commanders.length; i++) {
+                            let commander = commanders[i];
+                            if (canAdd(commander, team)) { addMemberToTeam(commander, team); commanders.splice(i, 1); placed = true; break; }
                         }
-                        if (!placed) {
-                            substitutes.push(member);
+                        if (!placed) team.errors.push("缺少指挥");
+                    });
+                    let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
+                    teams.forEach(team => {
+                        if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
+                        let placed = false;
+                        for (let i = 0; i < highLevelHealers.length; i++) {
+                            let healer = highLevelHealers[i];
+                            if (canAdd(healer, team)) { addMemberToTeam(healer, team); highLevelHealers.splice(i, 1); placed = true; break; }
                         }
-                    }
+                        if (!placed) team.errors.push("缺少高战奶妈");
+                    });
+
+                    const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
+                    const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
+                    const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
+                    const highLevelTargetMax = avgHighLevel + 1;
+                    let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
+                    let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
+                    let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
+                    const placementPools = [{ pool: highLevelPool }, { pool: normalHealers }, { pool: normalOutputs }];
+
+                    placementPools.forEach(poolData => {
+                        let pool = poolData.pool;
+                        while(pool.length > 0) {
+                            let member = pool.shift();
+                            let placed = false;
+                            let sortedTeams = [...teams].sort((a, b) => {
+                                if (a.members.length !== b.members.length) return a.members.length - b.members.length;
+                                if (member.isHighLevel) return a.members.filter(m => m.isHighLevel).length - b.members.filter(m => m.isHighLevel).length;
+                                if (member.role === 'healer') return a.members.filter(m => m.role === 'healer').length - b.members.filter(m => m.role === 'healer').length;
+                                return 0;
+                            });
+                            for (let team of sortedTeams) {
+                                if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) continue;
+                                if (canAdd(member, team)) { addMemberToTeam(member, team); placed = true; break; }
+                            }
+                            if (!placed) substitutes.push(member);
+                        }
+                    });
+
+                    substitutes = [...substitutes, ...remainingMembers];
+                    renderTeams(teams, { min: highLevelTargetMin, max: highLevelTargetMax });
+                    renderSubstitutes(substitutes);
                 });
 
-                // 5. 处理所有剩下的人
-                substitutes = [...substitutes, ...remainingMembers];
 
-                // 6. 渲染结果
-                renderTeams(teams, { min: highLevelTargetMin, max: highLevelTargetMax });
-                renderSubstitutes(substitutes);
-            });
-            // ===================================
-            // === 核心排团逻辑 (END) ===
-            // ===================================
+            } catch (err) {
+                    console.error("TCB: 初始化或登录失败:", err);
+                    showError(`腾讯云初始化或登录失败！`, err.message);
+                    emptyListMsg.textContent = "连接失败，请刷新重试。";
+            }
+        }
 
-            // 渲染团队卡片 (无数据库逻辑)
-            function renderTeams(teams, hlTargets) {
-                teamsOutput.innerHTML = '';
-                teamCountSpan.textContent = teams.length;
+        // 6. 封装“获取数据”的函数
+        async function fetchMembers() {
+            if (!membersCollection) {
+                console.warn("TCB: fetchMembers called before DB initialization.");
+                return;
+            }
+            refreshIcon.classList.add('spin');
+            refreshText.textContent = '刷新中...';
+            emptyListMsg.textContent = "正在加载云端数据...";
 
-                if (teams.length === 0) {
-                    teamsOutput.innerHTML = '<p class="text-gray-500 text-center py-4">未成功组建任何团队。</p>';
-                    return;
-                }
+            try {
+                const res = await membersCollection.get();
+                localMembers = res.data;
+                renderMemberList(localMembers);
+                console.log("TCB: 数据获取成功。", localMembers);
+                showError(""); // 清除旧的错误
 
-                teams.forEach(team => {
-                    const teamCard = document.createElement('div');
-                    teamCard.className = 'bg-white p-5 rounded-xl shadow-lg border border-gray-200';
+            } catch (err) {
+                console.error("TCB: 获取数据失败:", err);
+                showError("获取成员列表失败！请检查权限。", err.message);
+                emptyListMsg.textContent = "加载失败，请点击刷新。";
+            } finally {
+                refreshIcon.classList.remove('spin');
+                refreshText.textContent = '刷新';
+            }
+        }
 
-                    const healers = team.members.filter(m => m.role === 'healer');
-                    const highLevels = team.members.filter(m => m.isHighLevel);
-                    const commander = team.members.find(m => m.isCommander);
-                    const highLevelHealers = healers.filter(m => m.isHighLevel);
+        // 9. 渲染成员列表 (从 localMembers 渲染)
+        function renderMemberList(members) {
+            memberListContainer.innerHTML = ''; // 清空
+            if (members.length === 0) {
+                emptyListMsg.textContent = "暂无成员，请在上方添加。";
+                memberListContainer.appendChild(emptyListMsg);
+            } else {
+                members.forEach(member => {
+                    const memberEl = document.createElement('div');
+                    memberEl.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200';
+                    let idColorClass = 'text-gray-800 font-semibold';
+                    if (member.isCommander) idColorClass = 'text-blue-600 font-bold';
+                    else if (member.role === 'healer') idColorClass = 'text-green-700 font-semibold';
+                    else if (!member.isHighLevel) idColorClass = 'text-gray-500';
 
-                    let hlStatusColor = 'text-green-600';
-                    if (highLevels.length > hlTargets.max || highLevels.length < hlTargets.min) {
-                        hlStatusColor = 'text-yellow-600';
-                    }
-
-                    let memberListHtml = team.members.map(m => {
-
-                        let idColorClass = 'text-gray-800 font-medium'; // 默认高战输出
-                        if (m.isCommander) {
-                            idColorClass = 'text-blue-600 font-bold'; // 指挥
-                        } else if (m.role === 'healer') {
-                            idColorClass = 'text-green-700 font-semibold'; // 奶妈
-                        } else if (!m.isHighLevel) {
-                            idColorClass = 'text-gray-500 font-medium'; // 低战力
-                        }
-
-                        // 修复了模板字符串中的语法错误
-                        return `
-                            <li class="flex items-center p-2 bg-gray-50 rounded-md">
-                                <span class="w-32 truncate ${idColorClass}" title="${m.id}">${m.id}</span>
-                                <span class="text-sm ${m.role === 'healer' ? 'text-green-700' : 'text-red-700'} w-12">${m.role === 'healer' ? '奶妈' : '输出'}</span>
-                                ${m.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-sm" title="高战力"></i>' : '<i class="ph ph-star text-gray-300 text-sm" title="普通战力"></i>'}
-                                ${m.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-sm ml-2" title="指挥"></i>' : ''}
-                            </li>
-                        `;
-                    }).join('');
-
-                    let errorHtml = team.errors.map(err => `<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">${err}</span>`).join(' ');
-
-                    teamCard.innerHTML = `
-                        <h3 class="text-xl font-bold text-indigo-700 mb-3 pb-3 border-b border-indigo-100">
-                            第 ${team.id} 车
-                            ${team.members.length < 10 ? `<span class="text-red-600 font-semibold ml-2">(${team.members.length}/10 人未满)</span>` : ''}
-                        </h3>
-                        <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-sm">
-                            <span class="font-semibold ${commander ? 'text-gray-700' : 'text-red-600'}">指挥: ${commander ? commander.id : '无'}</span>
-                            <span class="font-semibold ${healers.length > 2 || healers.length === 0 ? 'text-red-600' : 'text-gray-700'}">奶妈: ${healers.length} 人</span>
-                            <span class="font-semibold ${highLevelHealers.length === 0 ? 'text-red-600' : 'text-gray-700'}">(高战奶: ${highLevelHealers.length} 人)</span>
-                            <span class="font-semibold ${hlStatusColor}">高战力: ${highLevels.length} 人</span>
+                    memberEl.innerHTML = `
+                        <div class="flex-1 overflow-hidden">
+                            <p class="truncate ${idColorClass}" title="${member.id}">${member.id}</p>
+                            <div class="flex items-center space-x-2 text-sm mt-1">
+                                <span class="px-2 py-0.5 rounded-full ${member.role === 'healer' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                    ${member.role === 'healer' ? '奶妈' : '输出'}
+                                </span>
+                                ${member.isHighLevel ? '<span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">高战力</span>' : ''}
+                                ${member.isCommander ? '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">指挥</span>' : ''}
+                            </div>
                         </div>
-                        <div class="mb-3">${errorHtml}</div>
-                        <ul class="space-y-1 max-h-60 overflow-y-auto pr-2">
-                            ${memberListHtml}
-                        </ul>
+                        <button data-id="${member._id}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
+                            <i class="ph-bold ph-x text-lg"></i>
+                        </button>
                     `;
-                    teamsOutput.appendChild(teamCard);
+                    memberListContainer.appendChild(memberEl);
                 });
             }
+            memberCountSpan.textContent = `${members.length} 人`;
+        }
 
-            // 渲染替补列表 (无数据库逻辑)
-            function renderSubstitutes(subs) {
-                subsOutput.innerHTML = '';
-                subCountSpan.textContent = subs.length;
+        // ===================================
+        // === 核心排团逻辑 (START) ===
+        // ===================================
 
-                if (subs.length === 0) {
-                    subsOutput.appendChild(emptySubsMsg);
-                    return;
+        function clearResults() {
+            teamsOutput.innerHTML = '';
+            subsOutput.innerHTML = '';
+            if(emptySubsMsg) subsOutput.appendChild(emptySubsMsg);
+            teamCountSpan.textContent = '0';
+            subCountSpan.textContent = '0';
+            showError("");
+        }
+
+        // 关键改动：showError 现在接受第二个参数 (debugMsg)
+        function showError(msg, debugMsg = "") {
+            errorMsgEl.textContent = msg;
+            debugErrorMsgEl.textContent = debugMsg;
+        }
+
+        // 渲染团队卡片
+        function renderTeams(teams, hlTargets) {
+            teamsOutput.innerHTML = '';
+            teamCountSpan.textContent = teams.length;
+
+            if (teams.length === 0) {
+                teamsOutput.innerHTML = '<p class="text-gray-500 text-center py-4">未成功组建任何团队。</p>';
+                return;
+            }
+
+            teams.forEach(team => {
+                const teamCard = document.createElement('div');
+                teamCard.className = 'bg-white p-5 rounded-xl shadow-lg border border-gray-200';
+
+                const healers = team.members.filter(m => m.role === 'healer');
+                const highLevels = team.members.filter(m => m.isHighLevel);
+                const commander = team.members.find(m => m.isCommander);
+                const highLevelHealers = healers.filter(m => m.isHighLevel);
+
+                let hlStatusColor = 'text-green-600';
+                if (highLevels.length > hlTargets.max || highLevels.length < hlTargets.min) {
+                    hlStatusColor = 'text-yellow-600';
                 }
 
-                // 替补席优先显示低战力
-                subs.sort((a, b) => a.isHighLevel - b.isHighLevel);
+                let memberListHtml = team.members.map(m => {
+                    let idColorClass = 'text-gray-800 font-medium';
+                    if (m.isCommander) idColorClass = 'text-blue-600 font-bold';
+                    else if (m.role === 'healer') idColorClass = 'text-green-700 font-semibold';
+                    else if (!m.isHighLevel) idColorClass = 'text-gray-500 font-medium';
 
-                subs.forEach(member => {
-                    const subEl = document.createElement('div');
-                    subEl.className = 'p-2 rounded-lg border flex items-center space-x-2';
-
-                    let idColorClass = 'text-gray-800 font-semibold'; // 默认高战输出
-                    if (member.isCommander) {
-                        idColorClass = 'text-blue-600 font-bold'; // 指挥
-                    } else if (member.role === 'healer') {
-                        idColorClass = 'text-green-700 font-semibold'; // 奶妈
-                    } else if (!member.isHighLevel) {
-                        idColorClass = 'text-gray-500'; // 低战力
-                    }
-
-                    subEl.innerHTML = `
-                        <span class="${idColorClass}" title="${member.id}">${member.id}</span>
-                        ${member.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-xs" title="高战力"></i>' : ''}
-                        ${member.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-xs" title="指挥"></i>' : ''}
-                        <span class="text-xs ${member.role === 'healer' ? 'text-green-700' : 'text-red-700'}">(${member.role === 'healer' ? '奶' : '输出'})</span>
+                    return `
+                        <li class="flex items-center p-2 bg-gray-50 rounded-md">
+                            <span class="w-32 truncate ${idColorClass}" title="${m.id}">${m.id}</span>
+                            <span class="text-sm ${m.role === 'healer' ? 'text-green-700' : 'text-red-700'} w-12">${m.role === 'healer' ? '奶妈' : '输出'}</span>
+                            ${m.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-sm" title="高战力"></i>' : '<i class="ph ph-star text-gray-300 text-sm" title="普通战力"></i>'}
+                            ${m.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-sm ml-2" title="指挥"></i>' : ''}
+                        </li>
                     `;
-                    subsOutput.appendChild(subEl);
-                });
-            }
-        } // 结束 initializeApp 函数
+                }).join('');
 
+                let errorHtml = team.errors.map(err => `<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">${err}</span>`).join(' ');
+
+                teamCard.innerHTML = `
+                    <h3 class="text-xl font-bold text-indigo-700 mb-3 pb-3 border-b border-indigo-100">
+                        第 ${team.id} 车
+                        ${team.members.length < 10 ? `<span class="text-red-600 font-semibold ml-2">(${team.members.length}/10 人未满)</span>` : ''}
+                    </h3>
+                    <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-sm">
+                        <span class="font-semibold ${commander ? 'text-gray-700' : 'text-red-600'}">指挥: ${commander ? commander.id : '无'}</span>
+                        <span class="font-semibold ${healers.length > 2 || healers.length === 0 ? 'text-red-600' : 'text-gray-700'}">奶妈: ${healers.length} 人</span>
+                        <span class="font-semibold ${highLevelHealers.length === 0 ? 'text-red-600' : 'text-gray-700'}">(高战奶: ${highLevelHealers.length} 人)</span>
+                        <span class="font-semibold ${hlStatusColor}">高战力: ${highLevels.length} 人</span>
+                    </div>
+                    <div class="mb-3">${errorHtml}</div>
+                    <ul class="space-y-1 max-h-60 overflow-y-auto pr-2">
+                        ${memberListHtml}
+                    </ul>
+                `;
+                teamsOutput.appendChild(teamCard);
+            });
+        }
+
+        // 渲染替补列表
+        function renderSubstitutes(subs) {
+            subsOutput.innerHTML = '';
+            subCountSpan.textContent = subs.length;
+
+            if (subs.length === 0) {
+                subsOutput.appendChild(emptySubsMsg);
+                return;
+            }
+
+            subs.sort((a, b) => a.isHighLevel - b.isHighLevel);
+
+            subs.forEach(member => {
+                const subEl = document.createElement('div');
+                subEl.className = 'p-2 rounded-lg border flex items-center space-x-2';
+                let idColorClass = 'text-gray-800 font-semibold';
+                if (member.isCommander) idColorClass = 'text-blue-600 font-bold';
+                else if (member.role === 'healer') idColorClass = 'text-green-700 font-semibold';
+                else if (!member.isHighLevel) idColorClass = 'text-gray-500';
+
+                subEl.innerHTML = `
+                    <span class="${idColorClass}" title="${member.id}">${member.id}</span>
+                    ${member.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-xs" title="高战力"></i>' : ''}
+                    ${member.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-xs" title="指挥"></i>' : ''}
+                    <span class="text-xs ${member.role === 'healer' ? 'text-green-700' : 'text-red-700'}">(${member.role === 'healer' ? '奶' : '输出'})</span>
+                `;
+                subsOutput.appendChild(subEl);
+            });
+        }
+
+        // ===================================
+        // === 核心排团逻辑 (END) ===
+        // ===================================
     </script>
 </body>
 </html>
