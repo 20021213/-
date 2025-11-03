@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>燕云十六声 - 百业团本安排器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Helvetica Neue', 'Arial', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* 自定义表单控件样式 */
+        .form-radio {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            display: inline-block;
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 9999px;
+            border: 2px solid #cbd5e1;
+            transition: all 0.2s;
+            cursor: pointer;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        .form-radio:checked {
+            border-color: #4f46e5;
+            background-color: #4f46e5;
+            border-width: 4px; /* 创建内部圆点效果 */
+        }
+        .form-checkbox {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            display: inline-block;
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 0.375rem;
+            border: 2px solid #cbd5e1;
+            transition: all 0.2s;
+            cursor: pointer;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+            position: relative;
+        }
+        .form-checkbox:checked {
+            border-color: #4f46e5;
+            background-color: #4f46e5;
+        }
+        .form-checkbox:checked::after {
+            content: '\2713'; /* checkmark */
+            display: block;
+            color: white;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            font-weight: 700;
+            line-height: 1;
+        }
+        .btn-primary {
+            @apply bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 ease-in-out;
+        }
+        .btn-danger {
+            @apply bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-200 ease-in-out;
+        }
+        .btn-secondary {
+            @apply bg-gray-500 text-white font-semibold py-1 px-3 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all duration-200 ease-in-out;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+
+        <header class="mb-8 p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+                <i class="ph-bold ph-users-three text-indigo-600 mr-3 text-4xl"></i>
+                喵语柠檬团本分配
+            </h1>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- 左侧：添加成员与列表 -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- 添加成员表单 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center">
+                        <i class="ph-bold ph-user-plus text-xl mr-2"></i>添加成员
+                    </h2>
+                    <form id="add-member-form" class="space-y-4">
+                        <div>
+                            <label for="gameId" class="block text-sm font-medium text-gray-700 mb-1">游戏ID (必填)</label>
+                            <input type="text" id="gameId" name="gameId" required
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                   placeholder="例如: 燕云吴彦祖">
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">职业 (必选)</label>
+                            <div class="flex space-x-4">
+                                <label for="role-output" class="flex items-center cursor-pointer">
+                                    <input type="radio" id="role-output" name="role" value="output" required class="form-radio">
+                                    <span class="text-gray-700">输出 (T也算输出)</span>
+                                </label>
+                                <label for="role-healer" class="flex items-center cursor-pointer">
+                                    <input type="radio" id="role-healer" name="role" value="healer" class="form-radio">
+                                    <span class="text-gray-700">奶妈</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2 space-x-4">
+                            <label for="isCommander" class="flex items-center cursor-pointer text-gray-700 font-medium">
+                                <input type="checkbox" id="isCommander" name="isCommander" class="form-checkbox">
+                                是指挥
+                            </label>
+                            <label for="isHighLevel" class="flex items-center cursor-pointer text-gray-700 font-medium">
+                                <input type="checkbox" id="isHighLevel" name="isHighLevel" class="form-checkbox">
+                                有六重心法 (高战力)
+                            </label>
+                        </div>
+
+                        <button type="submit" class="w-full btn-primary mt-4 py-3 text-base">
+                            <i class="ph-fill ph-plus-circle mr-1"></i>
+                            添加至列表
+                        </button>
+                    </form>
+                </div>
+
+                <!-- 成员列表 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center justify-between">
+                        <span class="flex items-center"><i class="ph-bold ph-list-numbers text-xl mr-2"></i>报名列表</span>
+                        <span id="member-count" class="text-lg font-bold text-indigo-600 bg-indigo-100 px-3 py-1 rounded-full">0 人</span>
+                    </h2>
+                    <div id="member-list-container" class="max-h-96 overflow-y-auto pr-2 space-y-3">
+                        <!-- 成员条目将在这里动态插入 -->
+                        <p id="empty-list-msg" class="text-gray-500 text-center py-4">暂无成员，请在上方添加。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：控制与结果 -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- 控制面板 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center">
+                        <i class="ph-bold ph-gear-six text-xl mr-2"></i>开始排团
+                    </h2>
+                    <div class="flex space-x-4">
+                        <button id="arrange-teams-btn" class="flex-1 btn-primary py-3 text-lg">
+                            <i class="ph-fill ph-rocket-launch mr-1"></i>
+                            开始自动分车
+                        </button>
+                        <button id="reset-all-btn" class="flex-1 btn-danger py-3 text-lg">
+                            <i class="ph-fill ph-trash mr-1"></i>
+                            清空所有数据
+                        </button>
+                    </div>
+                    <div id="error-message" class="mt-4 text-red-600 font-medium text-center"></div>
+                </div>
+
+                <!-- 结果区域 -->
+                <div class="space-y-6">
+                    <!-- 团队列表 -->
+                    <div>
+                        <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                            <i class="ph-bold ph-users text-xl mr-2 text-green-600"></i>
+                            已成团列表 (<span id="team-count">0</span> 车)
+                        </h2>
+                        <div id="teams-output" class="space-y-5">
+                            <!-- 团队卡片将在这里动态插入 -->
+                        </div>
+                    </div>
+
+                    <!-- 替补列表 -->
+                    <div>
+                        <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
+                            <i class="ph-bold ph-user-gear text-xl mr-2 text-yellow-600"></i>
+                            替补席 (<span id="sub-count">0</span> 人)
+                        </h2>
+                        <div id="subs-output" class="bg-white p-5 rounded-xl shadow-lg border border-gray-200">
+                            <div id="subs-list" class="flex flex-wrap gap-3">
+                                <p id="empty-subs-msg" class="text-gray-500">暂无替补人员。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const addMemberForm = document.getElementById('add-member-form');
+            const memberListContainer = document.getElementById('member-list-container');
+            const emptyListMsg = document.getElementById('empty-list-msg');
+            const memberCountSpan = document.getElementById('member-count');
+
+            const arrangeBtn = document.getElementById('arrange-teams-btn');
+            const resetBtn = document.getElementById('reset-all-btn');
+            const errorMsgEl = document.getElementById('error-message');
+
+            const teamsOutput = document.getElementById('teams-output');
+            const subsOutput = document.getElementById('subs-list');
+            const emptySubsMsg = document.getElementById('empty-subs-msg');
+
+            const teamCountSpan = document.getElementById('team-count');
+            const subCountSpan = document.getElementById('sub-count');
+
+            let members = [];
+
+            // 提交表单添加成员
+            addMemberForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const gameId = e.target.gameId.value.trim();
+                const role = e.target.role.value;
+                const isCommander = e.target.isCommander.checked;
+                const isHighLevel = e.target.isHighLevel.checked;
+
+                if (!gameId || !role) {
+                    showError("游戏ID和职业不能为空！");
+                    return;
+                }
+
+                // 使用时间戳+随机数确保 key 的唯一性，用于删除
+                const member = {
+                    key: Date.now() + Math.random(),
+                    id: gameId,
+                    role: role,
+                    isCommander: isCommander,
+                    isHighLevel: isHighLevel
+                };
+
+                members.push(member);
+                renderMemberList();
+                addMemberForm.reset();
+                e.target.gameId.focus();
+            });
+
+            // 渲染成员列表
+            function renderMemberList() {
+                memberListContainer.innerHTML = ''; // 清空
+                if (members.length === 0) {
+                    memberListContainer.appendChild(emptyListMsg);
+                } else {
+                    members.forEach(member => {
+                        const memberEl = document.createElement('div');
+                        memberEl.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200';
+
+                        let idColorClass = 'text-gray-800 font-semibold'; // 默认高战输出
+                        if (member.isCommander) {
+                            idColorClass = 'text-blue-600 font-bold'; // 指挥
+                        } else if (member.role === 'healer') {
+                            idColorClass = 'text-green-700 font-semibold'; // 奶妈
+                        } else if (!member.isHighLevel) {
+                            idColorClass = 'text-gray-500'; // 低战力输出
+                        }
+
+                        memberEl.innerHTML = `
+                            <div class="flex-1 overflow-hidden">
+                                <p class="truncate ${idColorClass}" title="${member.id}">${member.id}</p>
+                                <div class="flex items-center space-x-2 text-sm mt-1">
+                                    <span class="px-2 py-0.5 rounded-full ${member.role === 'healer' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                        ${member.role === 'healer' ? '奶妈' : '输出'}
+                                    </span>
+                                    ${member.isHighLevel ? '<span class="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 font-medium">高战力</span>' : ''}
+                                    ${member.isCommander ? '<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-medium">指挥</span>' : ''}
+                                </div>
+                            </div>
+                            <button data-key="${member.key}" class="remove-member-btn ml-2 text-gray-400 hover:text-red-600 transition-colors">
+                                <i class="ph-bold ph-x text-lg"></i>
+                            </button>
+                        `;
+                        memberListContainer.appendChild(memberEl);
+                    });
+                }
+                memberCountSpan.textContent = `${members.length} 人`;
+
+                // 绑定删除事件
+                document.querySelectorAll('.remove-member-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        // 找到按钮的 data-key
+                        const key = parseFloat(e.currentTarget.dataset.key);
+                        members = members.filter(m => m.key !== key);
+                        renderMemberList();
+                    });
+                });
+            }
+
+            // 清空所有数据
+            resetBtn.addEventListener('click', () => {
+                members = [];
+                renderMemberList();
+                clearResults();
+                showError(""); // 清空错误信息
+            });
+
+            // 清空结果区域
+            function clearResults() {
+                teamsOutput.innerHTML = '';
+                subsOutput.innerHTML = '';
+                subsOutput.appendChild(emptySubsMsg);
+                teamCountSpan.textContent = '0';
+                subCountSpan.textContent = '0';
+                showError("");
+            }
+
+            // 显示错误信息
+            function showError(msg) {
+                errorMsgEl.textContent = msg;
+            }
+
+            // ===================================
+            // === 核心排团逻辑 (START) ===
+            // ===================================
+            arrangeBtn.addEventListener('click', () => {
+                clearResults();
+
+                const TEAM_SIZE = 10;
+                let remainingMembers = [...members];
+
+                // 0. 计算车数
+                const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
+                if (numTeams === 0) {
+                    showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
+                    renderSubstitutes(remainingMembers); // 全部丢到替补
+                    return;
+                }
+
+                let teams = Array.from({ length: numTeams }, (_, i) => ({
+                    id: i + 1,
+                    members: [],
+                    errors: [], // 存储此车遇到的硬性问题
+                }));
+
+                let substitutes = [];
+
+                // 1. 检查硬性资源是否足够
+                const totalCommanders = remainingMembers.filter(m => m.isCommander).length;
+                const totalHighLevelHealers = remainingMembers.filter(m => m.isHighLevel && m.role === 'healer').length;
+
+                if (totalCommanders < numTeams) {
+                    showError(`指挥不足！需要 ${numTeams} 名指挥，实际只有 ${totalCommanders} 名。`);
+                    // 依然尝试组团
+                }
+                if (totalHighLevelHealers < numTeams) {
+                    showError(`高战奶妈不足！需要 ${numTeams} 名高战奶妈，实际只有 ${totalHighLevelHealers} 名。`);
+                    // 依然尝试组团
+                }
+
+                // 2. 定义辅助函数
+                // 检查是否可以将成员添加到团队
+                function canAdd(member, team) {
+                    // 10人满
+                    if (team.members.length >= TEAM_SIZE) return false;
+                    // ID冲突 (小号防撞)
+                    if (team.members.some(m => m.id === member.id)) return false;
+                    // 指挥满
+                    if (member.isCommander && team.members.some(m => m.isCommander)) return false;
+                    // 奶妈满 (最多2个)
+                    if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
+
+                    return true;
+                }
+
+                // 添加成员到团队 (并从剩余池中移除)
+                function addMemberToTeam(member, team) {
+                    team.members.push(member);
+                    const index = remainingMembers.findIndex(m => m.key === member.key);
+                    if (index > -1) {
+                        remainingMembers.splice(index, 1);
+                    }
+                }
+
+                // 3. 分配核心成员 (指挥 & 高战奶)
+
+                // 3.1 分配指挥 (每车1个)
+                let commanders = remainingMembers.filter(m => m.isCommander);
+                teams.forEach(team => {
+                    let placed = false;
+                    for (let i = 0; i < commanders.length; i++) {
+                        let commander = commanders[i];
+                        if (canAdd(commander, team)) {
+                            addMemberToTeam(commander, team);
+                            commanders.splice(i, 1); // 从指挥池移除
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (!placed) team.errors.push("缺少指挥");
+                });
+
+                // 3.2 分配高战奶 (每车至少1个)
+                let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
+                teams.forEach(team => {
+                    // 如果指挥已经是高战奶，则跳过
+                    if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
+
+                    let placed = false;
+                    for (let i = 0; i < highLevelHealers.length; i++) {
+                        let healer = highLevelHealers[i];
+                        if (canAdd(healer, team)) {
+                            addMemberToTeam(healer, team);
+                            highLevelHealers.splice(i, 1);
+                            placed = true;
+                            break;
+                        }
+                    }
+                    if (!placed) team.errors.push("缺少高战奶妈");
+                });
+
+                // 4. 分配剩余成员 (按优先级)
+
+                // 您的规则：优先低战力替补 -> 意味着我们必须优先安插高战力
+
+                // 4.1 计算高战力分配目标
+                const totalHighLevel = remainingMembers.filter(m => m.isHighLevel).length
+                                     + teams.reduce((acc, t) => acc + t.members.filter(m => m.isHighLevel).length, 0);
+
+                const avgHighLevel = Math.round(totalHighLevel / numTeams);
+                const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
+                const highLevelTargetMax = avgHighLevel + 1;
+
+                // 4.2 成员池
+                let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
+                let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
+                let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
+
+                // 优先级排序的池子
+                const placementPools = [
+                    { name: "高战力池", pool: highLevelPool },
+                    { name: "普通奶妈池", pool: normalHealers },
+                    { name: "普通输出池", pool: normalOutputs }
+                ];
+
+                // 4.3 循环填充
+                placementPools.forEach(poolData => {
+                    let pool = poolData.pool;
+
+                    while(pool.length > 0) {
+                        let member = pool.shift(); // 取出第一个
+                        let placed = false;
+
+                        // 排序团队，找到最需要这个人的团队
+                        let sortedTeams = [...teams].sort((a, b) => {
+                            // 规则1: 优先填未满的
+                            if (a.members.length !== b.members.length) {
+                                return a.members.length - b.members.length;
+                            }
+                            // 规则2: 如果是高战力，优先给高战力少的
+                            if (member.isHighLevel) {
+                                let aHL = a.members.filter(m => m.isHighLevel).length;
+                                let bHL = b.members.filter(m => m.isHighLevel).length;
+                                return aHL - bHL;
+                            }
+                            // 规则3: 如果是奶妈，优先给奶妈少的
+                            if (member.role === 'healer') {
+                                let aH = a.members.filter(m => m.role === 'healer').length;
+                                let bH = b.members.filter(m => m.role === 'healer').length;
+                                return aH - bH;
+                            }
+                            return 0; // 其他情况无所谓
+                        });
+
+                        for (let team of sortedTeams) {
+                            // 特殊规则：如果正在放高战力，但这个队的高战力已经达到max，跳过
+                            if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) {
+                                continue;
+                            }
+
+                            if (canAdd(member, team)) {
+                                addMemberToTeam(member, team);
+                                placed = true;
+                                break; // 跳出团队循环，处理下一个人
+                            }
+                        }
+
+                        if (!placed) {
+                            substitutes.push(member); // 没地方去，进替补
+                        }
+                    }
+                });
+
+                // 5. 处理所有剩下的人
+                // 此时 remainingMembers 里的人都是因为被池子筛掉（比如高战指挥、高战奶妈）而没进池子的人
+                // 把他们和替补池合并
+                substitutes = [...substitutes, ...remainingMembers];
+
+                // 6. 渲染结果
+                renderTeams(teams, { min: highLevelTargetMin, max: highLevelTargetMax });
+                renderSubstitutes(substitutes);
+            });
+            // ===================================
+            // === 核心排团逻辑 (END) ===
+            // ===================================
+
+            // 渲染团队卡片
+            function renderTeams(teams, hlTargets) {
+                teamsOutput.innerHTML = '';
+                teamCountSpan.textContent = teams.length;
+
+                if (teams.length === 0) {
+                    teamsOutput.innerHTML = '<p class="text-gray-500 text-center py-4">未成功组建任何团队。</p>';
+                    return;
+                }
+
+                teams.forEach(team => {
+                    const teamCard = document.createElement('div');
+                    teamCard.className = 'bg-white p-5 rounded-xl shadow-lg border border-gray-200';
+
+                    const healers = team.members.filter(m => m.role === 'healer');
+                    const highLevels = team.members.filter(m => m.isHighLevel);
+                    const commander = team.members.find(m => m.isCommander);
+                    const highLevelHealers = healers.filter(m => m.isHighLevel);
+
+                    let hlStatusColor = 'text-green-600';
+                    if (highLevels.length > hlTargets.max || highLevels.length < hlTargets.min) {
+                        hlStatusColor = 'text-yellow-600';
+                    }
+
+                    let memberListHtml = team.members.map(m => {
+
+                        let idColorClass = 'text-gray-800 font-medium'; // 默认高战输出
+                        if (m.isCommander) {
+                            idColorClass = 'text-blue-600 font-bold'; // 指挥
+                        } else if (m.role === 'healer') {
+                            idColorClass = 'text-green-700 font-semibold'; // 奶妈
+                        } else if (!m.isHighLevel) {
+                            idColorClass = 'text-gray-500 font-medium'; // 低战力
+                        }
+
+                        return `
+                            <li class="flex items-center p-2 bg-gray-50 rounded-md">
+                                <span class="w-32 truncate ${idColorClass}" title="${m.id}">${m.id}</span>
+                                <span class="text-sm ${m.role === 'healer' ? 'text-green-700' : 'text-red-700'} w-12">${m.role === 'healer' ? '奶妈' : '输出'}</span>
+                                ${m.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-sm" title="高战力"></i>' : '<i class="ph ph-star text-gray-300 text-sm" title="普通战力"></i>'}
+                                ${m.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-sm ml-2" title="指挥"></i>' : ''}
+                            </li>
+                        `;
+                    }).join('');
+
+                    let errorHtml = team.errors.map(err => `<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-xs font-semibold">${err}</span>`).join(' ');
+
+                    teamCard.innerHTML = `
+                        <h3 class="text-xl font-bold text-indigo-700 mb-3 pb-3 border-b border-indigo-100">
+                            第 ${team.id} 车
+                            ${team.members.length < 10 ? `<span class="text-red-600 font-semibold ml-2">(${team.members.length}/10 人未满)</span>` : ''}
+                        </h3>
+                        <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4 text-sm">
+                            <span class="font-semibold ${commander ? 'text-gray-700' : 'text-red-600'}">指挥: ${commander ? commander.id : '无'}</span>
+                            <span class="font-semibold ${healers.length > 2 || healers.length === 0 ? 'text-red-600' : 'text-gray-700'}">奶妈: ${healers.length} 人</span>
+                            <span class="font-semibold ${highLevelHealers.length === 0 ? 'text-red-600' : 'text-gray-700'}">(高战奶: ${highLevelHealers.length} 人)</span>
+                            <span class="font-semibold ${hlStatusColor}">高战力: ${highLevels.length} 人</span>
+                        </div>
+                        <div class="mb-3">${errorHtml}</div>
+                        <ul class="space-y-1 max-h-60 overflow-y-auto pr-2">
+                            ${memberListHtml}
+                        </ul>
+                    `;
+                    teamsOutput.appendChild(teamCard);
+                });
+            }
+
+            // 渲染替补列表
+            function renderSubstitutes(subs) {
+                subsOutput.innerHTML = '';
+                subCountSpan.textContent = subs.length;
+
+                if (subs.length === 0) {
+                    subsOutput.appendChild(emptySubsMsg);
+                    return;
+                }
+
+                // 替补席优先显示低战力
+                subs.sort((a, b) => a.isHighLevel - b.isHighLevel);
+
+                subs.forEach(member => {
+                    const subEl = document.createElement('div');
+                    subEl.className = 'p-2 rounded-lg border flex items-center space-x-2';
+
+                    let idColorClass = 'text-gray-800 font-semibold'; // 默认高战输出
+                    if (member.isCommander) {
+                        idColorClass = 'text-blue-600 font-bold'; // 指挥
+                    } else if (member.role === 'healer') {
+                        idColorClass = 'text-green-700 font-semibold'; // 奶妈
+                    } else if (!member.isHighLevel) {
+                        idColorClass = 'text-gray-500'; // 低战力
+                    }
+
+                    subEl.innerHTML = `
+                        <span class="${idColorClass}" title="${member.id}">${member.id}</span>
+                        ${member.isHighLevel ? '<i class="ph-fill ph-star text-yellow-500 text-xs" title="高战力"></i>' : ''}
+                        ${member.isCommander ? '<i class="ph-fill ph-microphone text-blue-500 text-xs" title="指挥"></i>' : ''}
+                        <span class="text-xs ${member.role === 'healer' ? 'text-green-700' : 'text-red-700'}">(${member.role === 'healer' ? '奶' : '输出'})</span>
+                    `;
+                    subsOutput.appendChild(subEl);
+                });
+            }
+
+            // 初始化
+            renderMemberList();
+        });
+    </script>
+</body>
+</html>
+
+
