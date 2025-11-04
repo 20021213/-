@@ -8,7 +8,7 @@
     <!-- 恢复：使用柠檬图标作为 Favicon -->
     <!-- 这是一个柠檬占位符图标 (Base64) -->
     <link rel="icon" type="image/png"
-          href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABhElEQVQ4T6WTS0sDQRiG728lB3AhuFBRCgQR/QZ9QOQWfQUBQQwUFOySCoK4d1BQcBAkKxQ8qC5aP4F6A0FESg5R2zLz8c1K0lWjC+z8Z3bvnnmZpD969g88pQ6TfG913d0l6B8n6Dclx3v/e0V/p75nB9x/6H8fD2F0o+p+WwXfH8qG/b7/Y47v78L/Z+9b12B/d/+n7lQ9fQ5H2B/h/7X1hQ8z/Gv2P3k+Kj8G//k737/8/g8H/hV7/Bf2/+09Yw/P//n58eRk9B/T+5T3g+6P4X/9//wD7//iP2//5D7gB8/3nI+nE6S8o7465j4P0O+s//m0o6dK/rB3T61S9e7T8w0K1v/x/h9o/k/zP6/s+g1H9/C/v//A/c+yv8P/g/f1oY/P/yP7gD9//Q//M/B/R/z/6v54oB4f/Qf/n/wT2N/Q+4//3jB+f/0/23/9f96g5c7lP5h2/7P2O2x//x+j4K+P/yP7//h+4A3H/+f87H3XhX7J/g/5P+f/U/r8C+//v/0hR9W92e8Yv8/+j+HwX/R/3/9J/e/f//B2+f/wf8D8+5s+p+eJ2o9T8L/v/1f/2g9v/5//j+cWd+P/p/r/87H33v+T8wAAAAAElFTkSuQmCC">
+          href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABhElEQVQ4T6WTS0sDQRiG728lB3AhuFBRCgQR/QZ9QOQWfQUBQQwUFOySCoK4d1BQcBAkKxQ8qC5aP4F6A0FESg5R2zLz8c1K0lWjC+z8Z3bvnnmZpD969g88pQ6TfG913d0l6B8n6Dclx3v/e0V/p75nB9x/6H8fD2F0o+p+WwXfH8qG/b7/Y47v78L/Z+9b12B/d/+n7lQ9fQ5H2B/h/7X1hQ8z/Gv2P3k+Kj8G//k737/8/g8H/hV7/Bf2/+09Yw/P//n58eRk9B/T+5T3g+6P4X/9//wD7//iP2//5D7gB8/3nI+nE6S8o7465j4P0O+s//m0o6dK/rB3T61S9e7T8w0K1v/x/h9o/k/zP6/s+g1H9/C/v//A/c+yv8P/g/f1oY/P/yP7gD9//Q//M/B/R/z/6v54oB4f/Qf/n/wT2N/Q+4//3jB9f/0/23/9f96g5c7lP5h2/7P2O2x//x+j4K+P/yP7//h+4A3H/+f87H3XhX7J/g/5P+f/U/r8C+//v/0hR9W92e8Yv8/+j+HwX/R/3/9J/e/f//B2+f/wf8D8+5s+p+eJ2o9T8L/v/1f/2g9v/5//j+cWd+P/p/r/87H33v+T8wAAAAAElFTkSuQmCC">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -120,6 +120,10 @@
         .drop-zone.drag-over {
             border-color: #4f46e5 !important; /* 拖拽时变蓝色 */
             background-color: #e0e7ff; /* 浅蓝色背景 */
+        }
+        .drop-zone.drag-over-subs {
+            border: 2px dashed #4f46e5 !important;
+            background-color: #e0e7ff !important;
         }
         /* 隐藏原始文件输入框 */
         #excel-file-input {
@@ -243,6 +247,14 @@
                             清空所有数据
                         </button>
                     </div>
+
+                    <!-- 新增：一键复制分组结果按钮 -->
+                    <button id="copy-results-btn" class="w-full mt-4 btn-secondary py-3 text-base hidden" disabled>
+                        <i class="ph-fill ph-copy simple-copy-icon mr-1"></i>
+                        <i class="ph-fill ph-check text-green-400 mr-1 hidden copied-icon"></i>
+                        一键复制分组结果 (含替补)
+                    </button>
+
                     <div id="error-message" class="mt-4 text-red-600 font-medium text-center"></div>
                     <div id="debug-error-message" class="mt-2 text-xs text-gray-500 text-center"></div>
                 </div>
@@ -266,6 +278,14 @@
                             <i class="ph-bold ph-user-gear text-xl mr-2 text-yellow-600"></i>
                             替补席 (<span id="sub-count">0</span> 人)
                         </h2>
+
+                        <!-- 新增：一键复制替补名单按钮 -->
+                        <button id="copy-subs-btn" class="w-full mb-3 btn-secondary py-3 text-base hidden" disabled>
+                            <i class="ph-fill ph-copy subs-copy-icon mr-1"></i>
+                            <i class="ph-fill ph-check text-green-400 mr-1 hidden subs-copied-icon"></i>
+                            一键复制替补席名单
+                        </button>
+
                         <div id="subs-output" class="bg-white p-5 rounded-xl shadow-lg border border-gray-200">
                             <div id="subs-list" class="flex flex-wrap gap-3">
                                 <p id="empty-subs-msg" class="text-gray-500">暂无替补人员。</p>
@@ -302,6 +322,8 @@
 
         const arrangeBtn = document.getElementById('arrange-teams-btn');
         const resetBtn = document.getElementById('reset-all-btn');
+        const copyResultsBtn = document.getElementById('copy-results-btn');
+        const copySubsBtn = document.getElementById('copy-subs-btn'); // 新增
         const errorMsgEl = document.getElementById('error-message');
         const debugErrorMsgEl = document.getElementById('debug-error-message');
 
@@ -402,6 +424,10 @@
                 if (numTeams === 0) {
                     showError(`人数不足 ${TEAM_SIZE} 人，无法组车。`);
                     renderSubstitutes(remainingMembers);
+                    copyResultsBtn.classList.remove('hidden'); // 显示复制按钮，即使没有成团
+                    copyResultsBtn.disabled = false;
+                    copySubsBtn.classList.remove('hidden'); // 显示复制按钮
+                    copySubsBtn.disabled = false;
                     return;
                 }
 
@@ -553,7 +579,18 @@
                 const endTime = performance.now(); // 性能计时结束
                 console.log(`分车算法执行时间: ${endTime - startTime} 毫秒`);
                 showError(`分车完成。耗时 ${(endTime - startTime).toFixed(2)} 毫秒。`);
+
+                // 分车完成后，显示复制按钮并启用
+                copyResultsBtn.classList.remove('hidden');
+                copyResultsBtn.disabled = false;
+                copySubsBtn.classList.remove('hidden'); // 新增：替补复制按钮
+                copySubsBtn.disabled = false;
             });
+
+            // 4.5 监听一键复制按钮
+            copyResultsBtn.addEventListener('click', () => copyToClipboard(copyResultsToClipboard));
+            // 4.6 监听一键复制替补按钮 (新增)
+            copySubsBtn.addEventListener('click', () => copyToClipboard(copySubsToClipboard));
 
             // 5. 监听 Excel 文件导入 (点击)
             excelFileInput.addEventListener('change', (event) => {
@@ -753,6 +790,10 @@
             subCountSpan.textContent = '0';
             generatedTeams = []; // 清空分车结果
             generatedHLTargets = {}; // 清空目标
+            copyResultsBtn.classList.add('hidden'); // 隐藏复制按钮
+            copyResultsBtn.disabled = true;
+            copySubsBtn.classList.add('hidden'); // 隐藏替补复制按钮 (新增)
+            copySubsBtn.disabled = true;
             showError("");
         }
 
@@ -1041,11 +1082,14 @@
             const generatedSubs = getGeneratedSubs();
             const memberIndex = generatedSubs.findIndex(m => m.uniqueId === uniqueId);
             if (memberIndex !== -1) {
+                 // 注意：这里返回的 list 是 getGeneratedSubs() 创建的临时数组
+                 // 必须确保后续操作 (如 handleDropMember) 能正确反映回 localMembers
+                 // 这是一个缺陷，但对于单次拖拽交换（list.splice）有效
                  return {
                     member: generatedSubs[memberIndex],
                     team: null, // 标记：在替补席
                     index: memberIndex,
-                    list: generatedSubs // 必须返回这个临时数组，因为交换操作要操作它
+                    list: generatedSubs
                  };
             }
             return null; // 未找到
@@ -1065,6 +1109,137 @@
                  }
              });
              return substitutes;
+        }
+
+        // ===================================================
+        // === 核心分享功能 (一键复制) (更新/新增) ===
+        // ===================================================
+
+        /**
+         * 通用复制函数：将生成的文本复制到剪贴板，并提供视觉反馈。
+         * @param {function} generationFn - 负责生成文本内容的函数。
+         * @param {string} type - 'results' 或 'subs'，用于控制图标和错误提示。
+         */
+        function copyToClipboard(generationFn) {
+            if (generatedTeams.length === 0 && getGeneratedSubs().length === 0) {
+                showError("没有分组结果可以复制！请先点击【开始自动分车】。");
+                return;
+            }
+
+            const { text, type } = generationFn();
+
+            // 复制逻辑
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = text;
+            tempTextarea.style.position = 'fixed';
+            tempTextarea.style.left = '-9999px';
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showError("分组结果已成功复制到剪贴板！可以直接粘贴到微信群。");
+
+                    // 视觉反馈
+                    let copyIconClass = type === 'results' ? '.simple-copy-icon' : '.subs-copy-icon';
+                    let checkIconClass = type === 'results' ? '.copied-icon' : '.subs-copied-icon';
+
+                    const copyIcon = document.querySelector(copyIconClass);
+                    const checkIcon = document.querySelector(checkIconClass);
+
+                    if(copyIcon && checkIcon) {
+                        copyIcon.classList.add('hidden');
+                        checkIcon.classList.remove('hidden');
+                        setTimeout(() => {
+                            copyIcon.classList.remove('hidden');
+                            checkIcon.classList.add('hidden');
+                        }, 2000);
+                    }
+                } else {
+                    showError("复制失败：浏览器不支持自动复制。请手动复制内容。");
+                }
+            } catch (err) {
+                showError("复制失败：出现错误。请手动复制内容。", err.toString());
+            } finally {
+                document.body.removeChild(tempTextarea);
+            }
+        }
+
+
+        /**
+         * 生成完整的团队和替补结果文本。
+         * @returns {{text: string, type: 'results'}}
+         */
+        function copyResultsToClipboard() {
+            let resultText = "【喵语柠檬团本分配结果】\n";
+            resultText += `总报名人数: ${localMembers.length} 人\n`;
+            resultText += `最终分车: ${generatedTeams.length} 车\n`;
+
+            // 格式化队伍信息
+            generatedTeams.forEach(team => {
+                const commander = team.members.find(m => m.isCommander);
+                const healers = team.members.filter(m => m.role === 'healer');
+                const highLevels = team.members.filter(m => m.isHighLevel);
+
+                resultText += `\n--- 第 ${team.id} 车 (${team.members.length}/10 人) ---\n`;
+                resultText += `指挥: ${commander ? commander.id : '【空缺】'}\n`;
+                resultText += `奶妈: ${healers.length} 人 (${healers.filter(m => m.isHighLevel).length} 高战奶)\n`;
+                resultText += `高战力: ${highLevels.length} 人 (目标 ${generatedHLTargets.min || 0}-${generatedHLTargets.max || 0})\n`;
+
+                resultText += "成员列表:\n";
+                team.members.forEach(m => {
+                    let roles = [m.role === 'healer' ? '奶' : '输出'];
+                    if (m.isHighLevel) roles.push('高战');
+                    if (m.isCommander) roles.push('指挥');
+
+                    let note = m.notes ? ` (备注: ${m.notes})` : '';
+                    resultText += `- ${m.id} (${roles.join('/')})${note}\n`;
+                });
+            });
+
+            // 格式化替补席信息
+            const substitutes = getGeneratedSubs();
+            if (substitutes.length > 0) {
+                resultText += `\n=== 替补席 (${substitutes.length} 人) ===\n`;
+                substitutes.forEach(m => {
+                    let roles = [m.role === 'healer' ? '奶' : '输出'];
+                    if (m.isHighLevel) roles.push('高战');
+                    if (m.isCommander) roles.push('指挥');
+
+                    let note = m.notes ? ` (备注: ${m.notes})` : '';
+                    resultText += `- ${m.id} (${roles.join('/')})${note}\n`;
+                });
+            } else {
+                resultText += `\n=== 替补席 (0 人) ===\n`;
+            }
+
+            return { text: resultText, type: 'results' };
+        }
+
+        /**
+         * 生成替补席名单文本。
+         * @returns {{text: string, type: 'subs'}}
+         */
+        function copySubsToClipboard() {
+            const substitutes = getGeneratedSubs();
+
+            let resultText = `【喵语柠檬团本-替补席名单 (${substitutes.length} 人)】\n`;
+
+            if (substitutes.length === 0) {
+                resultText += "本轮无替补人员，所有报名成员均已分配到团队中。\n";
+            } else {
+                substitutes.forEach(m => {
+                    let roles = [m.role === 'healer' ? '奶' : '输出'];
+                    if (m.isHighLevel) roles.push('高战');
+                    if (m.isCommander) roles.push('指挥');
+
+                    let note = m.notes ? ` (备注: ${m.notes})` : '';
+                    resultText += `- ${m.id} (${roles.join('/')})${note}\n`;
+                });
+            }
+
+            return { text: resultText, type: 'subs' };
         }
 
     </script>
