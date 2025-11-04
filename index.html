@@ -231,7 +231,7 @@
                 <!-- 控制面板 -->
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
                     <h2 class="text-2xl font-semibold text-gray-800 mb-5 border-b pb-3 flex items-center">
-                        <i class="ph-bold ph-gear-six text-xl mr-2"></i>开始排团
+                        <i class="ph-bold ph-gear-six text-xl mr-2"></i>开始排车
                     </h2>
                     <div class="flex space-x-4">
                         <button id="arrange-teams-btn" class="flex-1 btn-primary py-3 text-lg">
@@ -387,16 +387,16 @@
 
             // 4. 监听开始排团按钮
             arrangeBtn.addEventListener('click', () => {
+                const startTime = performance.now(); // 性能计时开始
                 clearResults();
                 if (localMembers.length === 0) {
                     showError("报名列表为空，请先添加成员或导入Excel。");
                     return;
                 }
 
-                // === 排团逻辑 (已修复替补重复问题) ===
+                // === 排团逻辑 (已优化性能) ===
                 const TEAM_SIZE = 10;
-                // ！！！ 关键修复 1：使用 localMembers 的副本进行分配 ！！！
-                let remainingMembers = [...localMembers];
+                let remainingMembers = [...localMembers]; // 关键：使用 localMembers 的副本进行分配
                 const numTeams = Math.floor(remainingMembers.length / TEAM_SIZE);
 
                 if (numTeams === 0) {
@@ -418,13 +418,16 @@
                  */
                 function addMemberToTeam(member, team) {
                     team.members.push(member);
+                    // O(N) 操作，但在优先分配阶段 (T次) 是可接受的
                     const index = remainingMembers.findIndex(m => m.uniqueId === member.uniqueId);
                     if (index > -1) remainingMembers.splice(index, 1);
                 }
 
+                /**
+                 * 检查成员是否可以加入该队伍 (硬约束)
+                 */
                 function canAdd(member, team) {
                     if (team.members.length >= TEAM_SIZE) return false;
-                    // 在分配阶段，不应检查 ID 是否重复，因为 remainingMembers 已经保证不重复
                     if (member.isCommander && team.members.some(m => m.isCommander)) return false;
                     if (member.role === 'healer' && team.members.filter(m => m.role === 'healer').length >= 2) return false;
                     return true;
@@ -432,14 +435,13 @@
 
                 // 1. 优先放指挥
                 let commanders = remainingMembers.filter(m => m.isCommander);
-                // ！！！ 关键修复 2：指挥分配后，必须从 remainingMembers 中移除 ！！！
                 teams.forEach(team => {
                     let placed = false;
                     for (let i = 0; i < commanders.length; i++) {
                         let commander = commanders[i];
                         if (canAdd(commander, team)) {
                             addMemberToTeam(commander, team);
-                            commanders.splice(i, 1);
+                            commanders.splice(i, 1); // 从指挥池中移除
                             placed = true;
                             break;
                         }
@@ -449,15 +451,15 @@
 
                 // 2. 其次放高战奶
                 let highLevelHealers = remainingMembers.filter(m => m.role === 'healer' && m.isHighLevel);
-                // ！！！ 关键修复 3：高战奶分配后，必须从 remainingMembers 中移除 ！！！
                 teams.forEach(team => {
+                    // 如果队伍已有高战奶妈，则跳过
                     if (team.members.some(m => m.role === 'healer' && m.isHighLevel)) return;
                     let placed = false;
                     for (let i = 0; i < highLevelHealers.length; i++) {
                         let healer = highLevelHealers[i];
                         if (canAdd(healer, team)) {
                             addMemberToTeam(healer, team);
-                            highLevelHealers.splice(i, 1);
+                            highLevelHealers.splice(i, 1); // 从高战奶池中移除
                             placed = true;
                             break;
                         }
@@ -468,64 +470,77 @@
                 // 3. 均衡高战目标计算
                 const totalHighLevel = localMembers.filter(m => m.isHighLevel).length;
                 const avgHighLevel = (numTeams > 0) ? Math.round(totalHighLevel / numTeams) : 0;
+                // 目标设定为平均值上下浮动 1
                 const highLevelTargetMin = Math.max(0, avgHighLevel - 1);
                 const highLevelTargetMax = avgHighLevel + 1;
 
-                // 4. 剩余的人池子
-                let highLevelPool = remainingMembers.filter(m => m.isHighLevel);
-                let normalHealers = remainingMembers.filter(m => !m.isHighLevel && m.role === 'healer');
-                let normalOutputs = remainingMembers.filter(m => !m.isHighLevel && m.role === 'output');
+                // 4. 剩余的人池子 (remainingMembers 已经是未分配的成员)
+                // 对剩余成员进行简单排序，确保优先分配高战力成员，以满足队伍的最小高战力目标
+                remainingMembers.sort((a, b) => b.isHighLevel - a.isHighLevel); // 高战力优先
 
-                // 确保 remainingMembers 只包含未被分配的成员
-                remainingMembers = [...highLevelPool, ...normalHealers, ...normalOutputs];
+                // 5. 逐个将 remainingMembers 分配到最合适的队伍 (性能优化 O(M*T) )
+                let unplacedMembers = [];
 
-                // 5. 逐个将 remainingMembers 分配到最合适的队伍
                 while(remainingMembers.length > 0) {
-                    let member = remainingMembers.shift(); // 取出第一个成员
+                    let member = remainingMembers.shift(); // O(1)
 
-                    let placed = false;
-                    // 按成员类型和队伍人数进行排序，尝试加入最少的队伍
-                    let sortedTeams = [...teams].sort((a, b) => {
-                        // 队伍人数少者优先
-                        if (a.members.length !== b.members.length) return a.members.length - b.members.length;
+                    let bestTeam = null;
+                    let bestScore = Infinity; // 越低越好
 
-                        // 高战力少者优先 (如果当前成员是高战)
-                        if (member.isHighLevel) return a.members.filter(m => m.isHighLevel).length - b.members.filter(m => m.isHighLevel).length;
+                    // 遍历所有团队，找到最佳匹配 O(T)，T 通常很小
+                    for (let team of teams) {
+                        if (team.members.length >= TEAM_SIZE) continue; // 队伍已满
 
-                        // 奶妈少者优先 (如果当前成员是奶妈)
-                        if (member.role === 'healer') return a.members.filter(m => m.role === 'healer').length - b.members.filter(m => m.role === 'healer').length;
+                        // --- 评分函数 ---
+                        // 硬约束检查：如果不能加入，直接跳过
+                        if (!canAdd(member, team)) continue;
 
-                        return 0;
-                    });
+                        // 1. 基础分数：队伍人数越少，分数越低 (倾向平衡人数)
+                        let score = team.members.length;
 
-                    for (let team of sortedTeams) {
-                        // 额外的高战力限制
-                        if (member.isHighLevel && team.members.filter(m => m.isHighLevel).length >= highLevelTargetMax) continue;
+                        // 2. 高战力平衡软约束
+                        const currentHighLevelCount = team.members.filter(m => m.isHighLevel).length;
 
-                        if (canAdd(member, team)) {
-                            team.members.push(member); // 直接加入队伍
-                            placed = true;
-                            break;
+                        if (member.isHighLevel) {
+                            // 如果是高战力：
+                            if (currentHighLevelCount >= highLevelTargetMax) {
+                                // 高战力已达上限，跳过该队伍，寻找更需要高战力的队伍
+                                continue;
+                            }
+                            // 高战力越少，分数越低 (鼓励高战力加入高战力少的队伍)
+                            score += (currentHighLevelCount * 0.1);
+                        } else {
+                            // 如果是普通成员：
+                            if (currentHighLevelCount < highLevelTargetMin) {
+                                // 队伍高战力不足，普通成员加入会使平衡更差，给予惩罚
+                                score += 5;
+                            }
                         }
-                    }
-                    // 6. ！！！ 关键修复 4：不需要将未分配的成员推入 substitutes ！！！
-                    // 任何未被分配的成员，会保留在 remainingMembers 中（虽然我们在这里使用了 shift()，但这是为了优化循环）
-                    // 在此算法中，所有未成功加入队伍的成员，在循环结束后，都不再属于 remainingMembers。
-                    // 因此，我们需要一个专门的列表来存储“未加入队伍”的成员。
-                    // 但是，由于我们是 *从* remainingMembers 中 shift() 出来进行分配，如果未 placed，它就丢失了。
 
-                    // 修正：重新使用一个临时的 subs 数组来捕获未分配的成员
-                    if (!placed) {
-                        // 如果没有成功加入任何队伍，则将其视为替补
-                        // 为了简化后续的渲染逻辑，我们直接在循环结束后计算替补
-                        // 这里我们只需要确保 remainingMembers 数组是空的，即所有成员都已尝试分配
-                        // (但为了安全，我们还是把它扔回去，虽然逻辑上有点别扭，但保证不会丢失数据)
-                        remainingMembers.push(member);
-                    }
-                }
+                        // 3. 奶妈平衡软约束
+                        if (member.role === 'healer') {
+                            const healerCount = team.members.filter(m => m.role === 'healer').length;
+                            // 奶妈数量越少，分数越低 (鼓励奶妈加入奶妈少的队伍)
+                            score += (healerCount * 0.5);
+                        }
 
-                // 7. 最终替补列表：remainingMembers 包含所有未能成功加入队伍的成员
-                const substitutes = remainingMembers;
+                        // 目标：找到分数最低的队伍
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestTeam = team;
+                        }
+                    } // end for team
+
+                    if (bestTeam) {
+                        bestTeam.members.push(member);
+                    } else {
+                        // 未能加入任何队伍 (队伍已满或不满足硬约束/软约束被跳过)
+                        unplacedMembers.push(member);
+                    }
+                } // end while remainingMembers
+
+                // 7. 最终替补列表
+                const substitutes = unplacedMembers;
 
                 // 存储结果到全局变量
                 generatedTeams = teams;
@@ -534,6 +549,10 @@
                 // 重新渲染
                 renderTeams(generatedTeams, generatedHLTargets);
                 renderSubstitutes(substitutes); // 渲染最终的剩余人员
+
+                const endTime = performance.now(); // 性能计时结束
+                console.log(`分车算法执行时间: ${endTime - startTime} 毫秒`);
+                showError(`分车完成。耗时 ${(endTime - startTime).toFixed(2)} 毫秒。`);
             });
 
             // 5. 监听 Excel 文件导入 (点击)
@@ -930,7 +949,7 @@
          */
         function handleDropMember(e) {
             e.preventDefault();
-            // 目标可能是列表项 (member-item)，也可能是空列表 (ul)
+            // 目标可能是列表项 (member-item)
             const targetEl = e.target.closest('.member-item');
 
             // 清理视觉效果
@@ -980,8 +999,9 @@
             if (!draggedMemberUniqueId) return;
 
             let draggedInfo = findMemberLocation(draggedMemberUniqueId);
-            if (!draggedInfo || !draggedInfo.team) {
-                showError("拖拽失败：只有队伍中的成员才能被拉入替补席。");
+            // 只有队伍中的成员才能拖入替补席
+            if (!draggedInfo || draggedInfo.team === null) {
+                showError("拖拽失败：该成员已在替补席或不在任何队伍中。");
                 return;
             }
 
@@ -990,10 +1010,6 @@
 
             // 2. 从队伍中移除
             draggedInfo.list.splice(draggedInfo.index, 1);
-
-            // 3. 将其添加到 localMembers 的末尾（确保它在下一次 getGeneratedSubs() 中被发现）
-            // 实际上，只要它不在任何队伍中，getGeneratedSubs 就能找到它，所以我们只需确保 localMembers 数组中有它
-            // 因为成员是从 localMembers 的副本中分配的，所以原始 localMembers 一直包含所有成员。
 
             // 重新渲染所有
             renderTeams(generatedTeams, generatedHLTargets);
@@ -1025,22 +1041,17 @@
             const generatedSubs = getGeneratedSubs();
             const memberIndex = generatedSubs.findIndex(m => m.uniqueId === uniqueId);
             if (memberIndex !== -1) {
-                // 关键：返回一个可变列表的引用。
-                // 由于 generatedSubs 是 getGeneratedSubs() 的局部变量，我们需要返回 localMembers 的引用
-                // 但是在实现交换逻辑时，直接操作这个临时数组更简单。
-                // 因为在 drop 完成后，我们会重新渲染一切，所以直接操作 generatedSubs 数组作为 list 是可行的。
                  return {
                     member: generatedSubs[memberIndex],
                     team: null, // 标记：在替补席
                     index: memberIndex,
-                    list: generatedSubs
+                    list: generatedSubs // 必须返回这个临时数组，因为交换操作要操作它
                  };
             }
             return null; // 未找到
         }
 
         // 辅助函数：重新获取当前替补人员列表
-        // ！！！ 关键修复 5：正确计算未被分配的成员 ！！！
         function getGeneratedSubs() {
              let substitutes = [];
              const allTeamMemberUniqueIds = new Set();
